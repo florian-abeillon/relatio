@@ -175,6 +175,7 @@ def group_sentences_in_batches(
         raise ValueError("max_batch_char_length and batch_size are mutually exclusive.")
     elif max_batch_char_length is not None:
 
+        # Already done before (with the max_number_words arg)
         # longer sentences are replaced with an empty string
         sentences = replace_sentences(
             sentences, max_sentence_length=max_batch_char_length
