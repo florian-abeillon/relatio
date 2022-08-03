@@ -21,6 +21,7 @@ from tqdm import tqdm
 from .utils import clean_text, is_subsequence
 
 nlp = spacy.load("en_core_web_sm")
+nlp.add_pipe('opentapioca')
 
 
 def mine_entities(

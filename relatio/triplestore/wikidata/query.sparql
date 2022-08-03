@@ -1,0 +1,38 @@
+
+SELECT ?p_iri 
+       ( SAMPLE(?p_label) AS ?p_label )
+       # To get list of objects, per predicate
+       ( GROUP_CONCAT( DISTINCT ?o ; SEPARATOR = "|" ) AS ?o_list )
+
+WHERE {{
+    {{
+    
+        SELECT ?p_iri   ?o_iri
+               ?p_label ?o_label
+               # To get IRI of object, if object is an instance (and not just an attribute)
+               ( IF( ISIRI(?o_iri), CONCAT( ?o_label, "\\\\", STR(?o_iri) ), ?o_label ) AS ?o )
+                    
+        WHERE {{
+        
+            # Get every triple with uri as a subject
+            <{iri}> ?p ?o_iri .
+
+            # Overlook WikiData statements (duplicate, unstructured information)
+            FILTER( !STRSTARTS( STR(?o_iri), "http://www.wikidata.org/entity/statement/" ) )
+
+            # Get IRI of predicate ?p
+            ?p_iri wikibase:claim|wikibase:directClaim ?p .
+
+            # Get English label of predicate and object (if exist)
+            SERVICE wikibase:label {{
+                bd:serviceParam wikibase:language "en" .
+                ?p_iri rdfs:label ?p_label .
+                ?o_iri rdfs:label ?o_label .
+            }}
+        
+        }}
+        
+    }}
+}}
+
+GROUP BY ?p_iri

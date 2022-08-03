@@ -1,12 +1,13 @@
 
-from rdflib import Graph
+from rdflib import Graph, OWL, RDF, RDFS
 from typing import Dict, List, Tuple
 
 import pandas as pd
 
+from relatio.triplestore.wikidata.enrich import add_wd_triples
 from relatio.triplestore.instances import Entity, Instance, Relation
-from relatio.triplestore.resources import ResourceStore, BASE_RESOURCES
-from relatio.triplestore.namespaces import PREFIXES, RELATIO_HD, RELATIO_LD
+from relatio.triplestore.resources import Resource, ResourceStore, BASE_RESOURCES
+from relatio.triplestore.namespaces import PREFIXES, RELATIO_HD, RELATIO_LD, WIKIDATA
 
 
 def initialize_triplestore() -> Graph:
@@ -21,6 +22,23 @@ def initialize_triplestore() -> Graph:
     # Fill triplestore with classes and properties
     for resource in BASE_RESOURCES:
         resource.to_graph(graph)
+
+    ## Link equivalent properties
+        
+    # From https://www.wikidata.org/wiki/Wikidata:Relation_between_properties_in_RDF_and_in_Wikidata
+    equivalent_props = [
+        ( Resource('P31', WIKIDATA), Resource('type', RDF) ),
+        ( Resource('P279', WIKIDATA), Resource('subClassOf', RDFS) ),
+        ( Resource('P1647', WIKIDATA), Resource('subPropertyOf', RDFS) )
+    ]
+
+    # -> OWL Full (owl:sameAs between properties)
+    sameAs = Resource('sameAs', OWL)
+    def add_equivalent_props(graph: Graph, prop1: Resource, prop2: Resource) -> None:
+        graph.add(( prop1.iri, sameAs.iri, prop2.iri ))
+
+    for prop1, prop2 in equivalent_props:
+        add_equivalent_props(graph, prop1, prop2)
 
     return graph
 
@@ -97,12 +115,16 @@ def save_triplestore(graph: Graph, path: str = "") -> None:
     graph.serialize(path + 'triplestore.ttl', "turtle")
 
 
-def build_triplestore(df: pd.DataFrame, path: str = "") -> None:
+def build_triplestore(df: pd.DataFrame, wikidata: bool = False, path: str = "") -> None:
     """ Main function """
 
     # Build and fill triplestore with df
     graph = initialize_triplestore()
     fill_triplestore(graph, df)
+
+    # Enrich triplestore with WikiData data
+    if wikidata:
+        add_wd_triples(graph, df)
 
     # Save triplestore
     save_triplestore(graph, path=path)
