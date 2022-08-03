@@ -7,7 +7,7 @@ import pandas as pd
 from relatio.triplestore.wikidata.enrich import add_wd_triples
 from relatio.triplestore.instances import Entity, Instance, Relation
 from relatio.triplestore.resources import Resource, ResourceStore, BASE_RESOURCES
-from relatio.triplestore.namespaces import PREFIXES, RELATIO_HD, RELATIO_LD, WIKIDATA
+from relatio.triplestore.namespaces import PREFIXES, RELATIO, RELATIO_HD, RELATIO_LD, WIKIDATA
 
 
 def initialize_triplestore() -> Graph:
@@ -33,9 +33,8 @@ def initialize_triplestore() -> Graph:
     ]
 
     # -> OWL Full (owl:sameAs between properties)
-    sameAs = Resource('sameAs', OWL)
     def add_equivalent_props(graph: Graph, prop1: Resource, prop2: Resource) -> None:
-        graph.add(( prop1.iri, sameAs.iri, prop2.iri ))
+        graph.add(( prop1.iri, OWL.sameAs, prop2.iri ))
 
     for prop1, prop2 in equivalent_props:
         add_equivalent_props(graph, prop1, prop2)
@@ -43,60 +42,89 @@ def initialize_triplestore() -> Graph:
     return graph
 
 
-def build_instances(row: pd.Series, 
+def build_instance(class_: type,
+                   label: str, 
+                   namespace: str,
+                   resource_store_base: ResourceStore,
+                   **kwargs) -> Relation:
+    """ Build instance from label """
+
+    # Create instance in base namespace
+    instance_base = class_(label, RELATIO, **kwargs)
+    resource_store_base.get_or_add(instance_base)
+
+    # Create non-negative instance if instance_base is neg
+    if kwargs.get('is_neg', False):
+        instance_non_neg = class_(label, RELATIO, is_neg=False)
+        instance_non_neg.set_neg_instance(instance_base)
+        resource_store_base.get_or_add(instance_non_neg)
+
+    # Create instance in appropriate namespace
+    instance = class_(label, namespace, **kwargs)
+    instance.set_base_instance(instance_base)
+
+    return instance
+
+
+def build_instances(class_: type, 
+                    row: pd.Series, 
                     key: str, 
-                    class_: type, 
-                    resource_stores: Dict[str, ResourceStore], 
+                    resource_stores: Dict[str, ResourceStore],
                     **kwargs) -> Tuple[Instance, Instance]:
     """ Build HD/LD instances from extracted concepts """
-    
-    instance_hd = row[f"{key}_highdim"]
-    instance_ld = row[f"{key}_lowdim"]
-    
-    # Create instance
-    instance_hd = class_(instance_hd, RELATIO_HD, *kwargs.get('hd', []))
-    instance_ld = class_(instance_ld, RELATIO_LD, *kwargs.get('ld', []))
+
+    label_hd = row[f"{key}_highdim"]
+    label_ld = row[f"{key}_lowdim"]
+    kwargs_hd = kwargs.get('hd', {})
+    kwargs_ld = kwargs.get('ld', {})
+
+    # Create instances in HD/LD namespaces, and set isHDInstanceOf property
+    instance_hd = build_instance(class_, label_hd, RELATIO_HD, resource_stores['base'], **kwargs_hd)
+    instance_ld = build_instance(class_, label_ld, RELATIO_LD, resource_stores['base'], **kwargs_ld)
     instance_hd.set_ld_instance(instance_ld)
-        
-    # Add instance to appropriate ResourceStore
+
+    # Add instances to appropriate ResourceStore
     resource_stores['hd'].get_or_add(instance_hd)
     resource_stores['ld'].get_or_add(instance_ld)
         
     return instance_hd, instance_ld
 
 
-def build_triples(df: pd.DataFrame) -> Tuple[List[tuple], 
-                                             Dict[str, ResourceStore], 
-                                             Dict[str, ResourceStore]]:
+def build_triples(df: pd.DataFrame) -> Tuple[Dict[str, ResourceStore], 
+                                             Dict[str, ResourceStore],
+                                             List[tuple]]:
     """ Build list of triples from sets of entities/property """
 
-    entities = { 'hd': ResourceStore(), 'ld': ResourceStore() }
-    relations = { 'hd': ResourceStore(), 'ld': ResourceStore() }
+    entities = { 'base': ResourceStore(), 'hd': ResourceStore(), 'ld': ResourceStore() }
+    relations = { 'base': ResourceStore(), 'hd': ResourceStore(), 'ld': ResourceStore() }
     triples = []
 
     # Iterate over each set of entities/property
     for _, row in df.iterrows():
         
         # Build subject/object entities
-        subject_hd, subject_ld = build_instances(row, 'ARG0', Entity, entities)
-        object_hd, object_ld = build_instances(row, 'ARG1', Entity, entities)
+        subject_hd, subject_ld = build_instances(Entity, row, 'ARG0', entities)
+        object_hd, object_ld = build_instances(Entity, row, 'ARG1', entities)
         
         # Build relation property
-        is_neg = { 'hd': [row['B-ARGM-NEG_highdim']], 'ld': [row['B-ARGM-NEG_lowdim']] }
-        relation_hd, relation_ld = build_instances(row, 'B-V', Relation, relations, **is_neg)
+        kwargs = { 
+            'hd': { 'is_neg': row['B-ARGM-NEG_highdim'] }, 
+            'ld': { 'is_neg': row['B-ARGM-NEG_lowdim'] } 
+        }
+        relation_hd, relation_ld = build_instances(Relation, row, 'B-V', relations, **kwargs)
         
         # Add HD/LD triples
         triples.append(( subject_hd.iri, relation_hd.iri, object_hd.iri ))
         triples.append(( subject_ld.iri, relation_ld.iri, object_ld.iri ))    
 
-    return triples, entities, relations
+    return entities, relations, triples
 
 
 def fill_triplestore(graph: Graph, df: pd.DataFrame) -> None:
     """ Fill triplestore with sets of entities/property """
 
     # Build triples
-    triples, entities, relations = build_triples(df)
+    entities, relations, triples = build_triples(df)
 
     # Fill triplestore with entities and relations
     resource_stores = list(entities.values()) + list(relations.values())

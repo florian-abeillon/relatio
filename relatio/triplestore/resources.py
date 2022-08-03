@@ -16,6 +16,13 @@ class Resource:
         self._label = label if label else key
         self._namespace = namespace
         self.iri = self.get_uri()
+        
+    def __repr__(self) -> str:
+        return self._label
+    def __str__(self) -> str:
+        return self._label
+    def __hash__(self) -> str:
+        return hash(self.iri)
 
     def get_uri(self) -> URIRef:
         """ Build unique resource identifier """
@@ -68,10 +75,9 @@ class ResourceStore:
         self._resources = {}
 
     def get_or_add(self, resource):
-        key = resource.iri
-        if not key in self._resources:
-            self._resources[key] = resource
-        return self._resources[key]
+        if not resource in self._resources:
+            self._resources[resource] = resource
+        return self._resources[resource]
 
     def to_graph(self, graph: Graph) -> None:
         # Fill triplestore with every resource from self._resources
