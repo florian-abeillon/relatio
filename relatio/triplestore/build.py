@@ -1,45 +1,52 @@
 
-from rdflib import Graph, OWL, RDF, RDFS
+from rdflib import Graph
 from typing import Dict, List, Tuple
 
 import pandas as pd
 
-from relatio.triplestore.wikidata.enrich import add_wd_triples
-from relatio.triplestore.instances import Entity, Instance, Relation
-from relatio.triplestore.resources import Resource, ResourceStore, BASE_RESOURCES
-from relatio.triplestore.namespaces import PREFIXES, RELATIO, RELATIO_HD, RELATIO_LD, WIKIDATA
+from relatio.triplestore.wikidata.enrich import build_wd_resources
+from relatio.triplestore.wordnet.enrich import build_wn_resources
+from relatio.triplestore.models import (
+    ENTITY, ENTITY_HD, ENTITY_LD,
+    RELATION, RELATION_HD, RELATION_LD,
+    IS_HD_INSTANCE_OF, IS_NEG_OF,
+    Entity, Instance, Relation
+)
+from relatio.triplestore.resources import ResourceStore
+from relatio.triplestore.namespaces import (
+    PREFIXES, RELATIO, RELATIO_HD, 
+    RELATIO_LD, WIKIDATA, WORDNET
+)
 
 
-def initialize_triplestore() -> Graph:
-    """ Initialize triplestore """
 
-    graph = Graph()
+def bind_prefixes(graph: Graph, wikidata: bool, wordnet: bool) -> None:
+    """ Bind prefixes to each base namespace """
 
-    # Bind prefixes to each custom namespace
-    for prefix, namespace in PREFIXES:
-        graph.bind(prefix, namespace)
+    namespaces = [ RELATIO, RELATIO_HD, RELATIO_LD ]
+    if wikidata:
+        namespaces.append(WIKIDATA)
+    if wordnet:
+        namespaces.append(WORDNET)
 
-    # Fill triplestore with classes and properties
-    for resource in BASE_RESOURCES:
-        resource.to_graph(graph)
+    for namespace in namespaces:
+        graph.bind(PREFIXES[namespace], namespace)
 
-    ## Link equivalent properties
-        
-    # From https://www.wikidata.org/wiki/Wikidata:Relation_between_properties_in_RDF_and_in_Wikidata
-    equivalent_props = [
-        ( Resource('P31', WIKIDATA), Resource('type', RDF) ),
-        ( Resource('P279', WIKIDATA), Resource('subClassOf', RDFS) ),
-        ( Resource('P1647', WIKIDATA), Resource('subPropertyOf', RDFS) )
-    ]
 
-    # -> OWL Full (owl:sameAs between properties)
-    def add_equivalent_props(graph: Graph, prop1: Resource, prop2: Resource) -> None:
-        graph.add(( prop1.iri, OWL.sameAs, prop2.iri ))
+def add_resources(entities: Dict[str, ResourceStore], relations: Dict[str, ResourceStore]) -> None:
+    """ Add base classes and properties """
 
-    for prop1, prop2 in equivalent_props:
-        add_equivalent_props(graph, prop1, prop2)
+    # Add classes
+    _ = entities['base'].get_or_add(ENTITY)
+    _ = entities['hd_ld'].get_or_add(ENTITY_HD)
+    _ = entities['hd_ld'].get_or_add(ENTITY_LD)
 
-    return graph
+    # Add properties
+    _ = relations['base'].get_or_add(RELATION)
+    _ = relations['hd_ld'].get_or_add(RELATION_HD)
+    _ = relations['hd_ld'].get_or_add(RELATION_LD)
+    _ = relations['base'].get_or_add(IS_HD_INSTANCE_OF)
+    _ = relations['base'].get_or_add(IS_NEG_OF)
 
 
 def build_instance(class_: type,
@@ -51,13 +58,13 @@ def build_instance(class_: type,
 
     # Create instance in base namespace
     instance_base = class_(label, RELATIO, **kwargs)
-    resource_store_base.get_or_add(instance_base)
+    instance_base = resource_store_base.get_or_add(instance_base)
 
     # Create non-negative instance if instance_base is neg
     if kwargs.get('is_neg', False):
         instance_non_neg = class_(label, RELATIO, is_neg=False)
+        instance_non_neg = resource_store_base.get_or_add(instance_non_neg)
         instance_non_neg.set_neg_instance(instance_base)
-        resource_store_base.get_or_add(instance_non_neg)
 
     # Create instance in appropriate namespace
     instance = class_(label, namespace, **kwargs)
@@ -79,25 +86,21 @@ def build_instances(class_: type,
     kwargs_ld = kwargs.get('ld', {})
 
     # Create instances in HD/LD namespaces, and set isHDInstanceOf property
-    instance_hd = build_instance(class_, label_hd, RELATIO_HD, resource_stores['base'], **kwargs_hd)
-    instance_ld = build_instance(class_, label_ld, RELATIO_LD, resource_stores['base'], **kwargs_ld)
+    instance_hd = build_instance(class_, label_hd, RELATIO_HD, resource_stores['hd'], **kwargs_hd)
+    instance_ld = build_instance(class_, label_ld, RELATIO_LD, resource_stores['ld'], **kwargs_ld)
     instance_hd.set_ld_instance(instance_ld)
-
-    # Add instances to appropriate ResourceStore
-    resource_stores['hd'].get_or_add(instance_hd)
-    resource_stores['ld'].get_or_add(instance_ld)
         
     return instance_hd, instance_ld
 
 
-def build_triples(df: pd.DataFrame) -> Tuple[Dict[str, ResourceStore], 
-                                             Dict[str, ResourceStore],
-                                             List[tuple]]:
+def build_resources(df: pd.DataFrame) -> Tuple[Dict[str, ResourceStore], Dict[str, ResourceStore]]:
     """ Build list of triples from sets of entities/property """
 
-    entities = { 'base': ResourceStore(), 'hd': ResourceStore(), 'ld': ResourceStore() }
-    relations = { 'base': ResourceStore(), 'hd': ResourceStore(), 'ld': ResourceStore() }
-    triples = []
+    entities = { 'base': ResourceStore(), 'hd_ld': ResourceStore() }
+    relations = { 'base': ResourceStore(), 'hd_ld': ResourceStore() }
+
+    # Add base classes and properties
+    add_resources(entities, relations)
 
     # Iterate over each set of entities/property
     for _, row in df.iterrows():
@@ -113,25 +116,37 @@ def build_triples(df: pd.DataFrame) -> Tuple[Dict[str, ResourceStore],
         }
         relation_hd, relation_ld = build_instances(Relation, row, 'B-V', relations, **kwargs)
         
-        # Add HD/LD triples
-        triples.append(( subject_hd.iri, relation_hd.iri, object_hd.iri ))
-        triples.append(( subject_ld.iri, relation_ld.iri, object_ld.iri ))    
+        # Add HD/LD relations to objects
+        subject_hd.add_object(( relation_hd, object_hd ))
+        subject_ld.add_object(( relation_ld, object_ld )) 
 
-    return entities, relations, triples
+    return entities, relations
 
 
-def fill_triplestore(graph: Graph, df: pd.DataFrame) -> None:
-    """ Fill triplestore with sets of entities/property """
+def enrich_triplestore(wikidata: bool, 
+                       wordnet: bool, 
+                       entities: ResourceStore, 
+                       relations: ResourceStore) -> Tuple[ResourceStore, List[tuple]]:
+    """ Fetch external data """
 
-    # Build triples
-    entities, relations, triples = build_triples(df)
+    resources = ResourceStore()
 
-    # Fill triplestore with entities and relations
-    resource_stores = list(entities.values()) + list(relations.values())
-    for resource_store in resource_stores:
-        resource_store.to_graph(graph)
-        
-    # Fill triplestore with triples 
+    # Enrich entities list with WikiData data
+    if wikidata:
+        resources_wd = build_wd_resources(entities)
+        resources.update(resources_wd)
+
+    # Enrich entities and relations lists with WordNet data
+    if wordnet:
+        resources_wn = build_wn_resources(entities, relations)
+        resources.update(resources_wn)
+
+    return resources
+
+
+def fill_triplestore(graph: Graph, resources: ResourceStore, triples: List[tuple]) -> None:
+    """ Fill triplestore with resources and triples """
+    resources.to_graph(graph)
     for triple in triples:
         graph.add(triple)
 
@@ -143,16 +158,26 @@ def save_triplestore(graph: Graph, path: str = "") -> None:
     graph.serialize(path + 'triplestore.ttl', "turtle")
 
 
-def build_triplestore(df: pd.DataFrame, wikidata: bool = False, path: str = "") -> None:
+def build_triplestore(df: pd.DataFrame, 
+                      wikidata: bool = False, 
+                      wordnet: bool = False, 
+                      path: str = "") -> None:
     """ Main function """
 
-    # Build and fill triplestore with df
-    graph = initialize_triplestore()
-    fill_triplestore(graph, df)
+    # Initialize triplestore
+    graph = Graph()
+    bind_prefixes(graph, wikidata, wordnet)
 
-    # Enrich triplestore with WikiData data
-    if wikidata:
-        add_wd_triples(graph, df)
+    # Build instances
+    entities, relations = build_resources(df)
+    resources = entities['base'] | entities['hd_ld'] | relations['base'] | relations['hd_ld']
+
+    # Enrich triplestore with external data
+    resources_ext = enrich_triplestore(wikidata, wordnet, entities['base'], relations['base'])
+    resources.update(resources_ext)
+
+    # Fill triplestore with resources and triples
+    fill_triplestore(graph, resources)
 
     # Save triplestore
     save_triplestore(graph, path=path)
