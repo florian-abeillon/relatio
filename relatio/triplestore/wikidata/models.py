@@ -1,23 +1,24 @@
 
 from rdflib import Graph, Literal, RDF, URIRef
+from typing import Optional
 
-from relatio.triplestore.models import Instance
-from relatio.triplestore.namespaces import WIKIDATA
-from relatio.triplestore.resources import Class, Property, Resource
-from relatio.triplestore.utils import get_hash
+from ..models import ENTITY, Instance
+from ..namespaces import WIKIDATA
+from ..resources import Class, Property, Resource, ResourceStore
+from ..utils import get_hash
 
 
 # Define WikiData class and properties
 ENTITY_WD = Class('WdEntity', WIKIDATA)
-RELATION_WD = Property('WdRelation', WIKIDATA)
-IS_WD_INSTANCE_OF = Property('isWDInstanceOf', WIKIDATA)
+RELATION_WD = Property('WdRelation', WIKIDATA, domain=ENTITY_WD, range=ENTITY_WD)
+IS_WD_INSTANCE_OF = Property('isWDInstanceOf', WIKIDATA, domain=ENTITY_WD, range=ENTITY)
 
 
 class WdInstance(Resource):
     """ Wikidata instance of a class """
     
-    def __init__(self, label: str, iri: str = ""):
-        super().__init__(label, WIKIDATA)
+    def __init__(self, label: str, iri: str = "", resources: Optional[ResourceStore] = None):
+        super().__init__(label, WIKIDATA, resources=resources)
         if iri:
             self.iri = URIRef(iri)
 
@@ -40,7 +41,7 @@ class WdRelation(WdInstance):
 class WdEntity(WdInstance):
     """ WikiData entity """
     
-    def __init__(self, ent, iri: str = ""):
+    def __init__(self, ent, iri: str = "", resources: Optional[ResourceStore] = None):
         
         # If ent is a string (output of WikiData query)
         if iri:
@@ -52,7 +53,7 @@ class WdEntity(WdInstance):
             self._type = ent.label_
             self._desc = ent._.description
 
-        super().__init__(label, iri=iri)
+        super().__init__(label, iri=iri, resources=resources)
         self._relatio_instance = None
         self._objects = set()
         self._attributes = set()

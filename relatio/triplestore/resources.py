@@ -2,14 +2,18 @@
 from rdflib import Graph, Literal, RDF, RDFS, URIRef
 from typing import Optional
 
-to_pascal_case = lambda text: text.replace("_", " ").title().replace(" ", "")
+to_pascal_case = lambda text: "".join([ 
+    token[0].upper() + token[1:] 
+    for token in text.replace("_", " ").split() 
+])
 to_camel_case = lambda text: text[0].lower() + to_pascal_case(text)[1:]
 
 
 
 class Triple(tuple):
+    """ RDF triple """
 
-    def __init__(self, triple: tuple):
+    def __new__(cls, triple: tuple):
         assert len(triple) == 3
 
         s, p, o = triple
@@ -17,8 +21,12 @@ class Triple(tuple):
             s = URIRef(s)
         if not isinstance(p, URIRef):
             p = URIRef(p)
-        self = ( s, p, o )
-
+            
+        triple = ( s, p, o )
+        return super().__new__(cls, triple)
+    
+    def __init__(self, triple: tuple):
+        s, p, o = triple
         self._label = f"<{s}> <{p}> "
         self._label += f"<{o}>" if isinstance(o, URIRef) else o
         
@@ -37,8 +45,21 @@ class Triple(tuple):
 class Resource:
     """ Base triplestore resource """
 
-    def __init__(self, label: str, namespace: str):
-        self._label = label
+    def __new__(cls, *args, **kwargs):
+
+        # If a ResourceStore is passed in kwargs
+        resources = kwargs.pop('resources', None)
+        if resources is not None:
+            resource = super().__new__(cls)
+            resource.__init__(*args, **kwargs)
+            # resource = cls(*args, **kwargs)
+            return resources.get_or_add(resource)
+
+        # Otherwise, create resource as is
+        return super().__new__(cls)
+
+    def __init__(self, label: str, namespace: str, resources: dict = None):
+        self._label = str(label)
         self._namespace = namespace
         self.iri = self.get_iri()
         
@@ -55,16 +76,19 @@ class Resource:
 
     def to_graph(self, graph: Graph) -> None:
         """ Fill triplestore with resource's label """
-        label = Literal(self._label)
-        graph.add(( self.iri, RDFS.label, label ))
+        graph.add(( self.iri, RDFS.label, Literal(self._label) ))
 
 
 class Class(Resource):
     """ Class of resources """
     
-    def __init__(self, label: str, namespace: str, superclass: Optional[Resource] = None):
+    def __init__(self, label: str, 
+                       namespace: str,
+                       superclass: Optional[Resource] = None, 
+                       resources: Optional[dict] = None):
+
         label = to_pascal_case(label)
-        super().__init__(label, namespace)
+        super().__init__(label, namespace, resources=resources)
         self._superclass = superclass
 
     def to_graph(self, graph: Graph) -> None:
@@ -83,9 +107,11 @@ class Property(Resource):
                        namespace: str, 
                        superproperty: Optional[Resource] = None,
                        domain: Optional[Class] = None,
-                       range: Optional[Class] = None):
+                       range: Optional[Class] = None,
+                       resources: Optional[dict] = None):
+
         label = to_camel_case(label)
-        super().__init__(label, namespace)
+        super().__init__(label, namespace, resources=resources)
         self._superproperty = superproperty
         self._domain = domain
         self._range = range
@@ -96,14 +122,20 @@ class Property(Resource):
         
         if self._superproperty is not None:
             graph.add(( self.iri, RDFS.subPropertyOf, self._superproperty.iri )) 
+
         if self._domain is not None:
             graph.add(( self.iri, RDFS.domain, self._domain.iri )) 
         if self._range is not None:
-            graph.add(( self.iri, RDFS.range, self._range.iri ))           
+            range = self._range if isinstance(self._range, URIRef) else self._range.iri
+            graph.add(( self.iri, RDFS.range, range ))           
 
 
 class ResourceStore(dict):
     """ Store of resources to be filled into triplestore """
+
+    def __or__(self, resource_store: dict) -> dict:
+        self.update(resource_store)
+        return self
 
     def get_or_add(self, resource: Resource) -> Resource:
         """ Get a resource from self, or add it to self if necessary """

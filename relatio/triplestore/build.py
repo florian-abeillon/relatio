@@ -1,19 +1,19 @@
 
 from rdflib import Graph
-from typing import Dict, List, Tuple
+from typing import Dict, Optional, Tuple
 
 import pandas as pd
 
-from relatio.triplestore.wikidata.enrich import build_wd_resources
-from relatio.triplestore.wordnet.enrich import build_wn_resources
-from relatio.triplestore.models import (
+from .wikidata import build_wd_resources
+from .wordnet import build_wn_resources
+from .models import (
     ENTITY, ENTITY_HD, ENTITY_LD,
     RELATION, RELATION_HD, RELATION_LD,
     IS_HD_INSTANCE_OF, IS_NEG_OF,
     Entity, Instance, Relation
 )
-from relatio.triplestore.resources import ResourceStore
-from relatio.triplestore.namespaces import (
+from .resources import ResourceStore
+from .namespaces import (
     PREFIXES, RELATIO, RELATIO_HD, 
     RELATIO_LD, WIKIDATA, WORDNET
 )
@@ -52,22 +52,23 @@ def add_resources(entities: Dict[str, ResourceStore], relations: Dict[str, Resou
 def build_instance(class_: type,
                    label: str, 
                    namespace: str,
-                   resource_store_base: ResourceStore,
-                   **kwargs) -> Relation:
+                   resource_store: Dict[str, ResourceStore],
+                   **kwargs) -> Optional[Instance]:
     """ Build instance from label """
 
+    if pd.isna(label):
+        return None
+
     # Create instance in base namespace
-    instance_base = class_(label, RELATIO, **kwargs)
-    instance_base = resource_store_base.get_or_add(instance_base)
+    instance_base = class_(label, RELATIO, resources=resource_store['base'], **kwargs)
 
     # Create non-negative instance if instance_base is neg
     if kwargs.get('is_neg', False):
-        instance_non_neg = class_(label, RELATIO, is_neg=False)
-        instance_non_neg = resource_store_base.get_or_add(instance_non_neg)
+        instance_non_neg = class_(label, RELATIO, resources=resource_store['base'], is_neg=False)
         instance_non_neg.set_neg_instance(instance_base)
 
     # Create instance in appropriate namespace
-    instance = class_(label, namespace, **kwargs)
+    instance = class_(label, namespace, resources=resource_store['hd_ld'], **kwargs)
     instance.set_base_instance(instance_base)
 
     return instance
@@ -85,10 +86,13 @@ def build_instances(class_: type,
     kwargs_hd = kwargs.get('hd', {})
     kwargs_ld = kwargs.get('ld', {})
 
-    # Create instances in HD/LD namespaces, and set isHDInstanceOf property
-    instance_hd = build_instance(class_, label_hd, RELATIO_HD, resource_stores['hd'], **kwargs_hd)
-    instance_ld = build_instance(class_, label_ld, RELATIO_LD, resource_stores['ld'], **kwargs_ld)
-    instance_hd.set_ld_instance(instance_ld)
+    # Create instances in HD/LD namespaces
+    instance_hd = build_instance(class_, label_hd, RELATIO_HD, resource_stores, **kwargs_hd)
+    instance_ld = build_instance(class_, label_ld, RELATIO_LD, resource_stores, **kwargs_ld)
+
+    # Set isHDInstanceOf property
+    if not ( instance_hd is None or instance_ld is None ):
+        instance_hd.set_ld_instance(instance_ld)
         
     return instance_hd, instance_ld
 
@@ -117,8 +121,15 @@ def build_resources(df: pd.DataFrame) -> Tuple[Dict[str, ResourceStore], Dict[st
         relation_hd, relation_ld = build_instances(Relation, row, 'B-V', relations, **kwargs)
         
         # Add HD/LD relations to objects
-        subject_hd.add_object(( relation_hd, object_hd ))
-        subject_ld.add_object(( relation_ld, object_ld )) 
+        if not ( subject_hd is None or relation_hd is None ):
+            if object_hd is None:
+                object_hd = subject_hd
+            subject_hd.add_object(relation_hd, object_hd)
+
+        if not ( subject_ld is None or relation_ld is None ):
+            if object_ld is None:
+                object_ld = subject_ld
+            subject_ld.add_object(relation_ld, object_ld) 
 
     return entities, relations
 
@@ -126,7 +137,7 @@ def build_resources(df: pd.DataFrame) -> Tuple[Dict[str, ResourceStore], Dict[st
 def enrich_triplestore(wikidata: bool, 
                        wordnet: bool, 
                        entities: ResourceStore, 
-                       relations: ResourceStore) -> Tuple[ResourceStore, List[tuple]]:
+                       relations: ResourceStore) -> ResourceStore:
     """ Fetch external data """
 
     resources = ResourceStore()
@@ -144,14 +155,7 @@ def enrich_triplestore(wikidata: bool,
     return resources
 
 
-def fill_triplestore(graph: Graph, resources: ResourceStore, triples: List[tuple]) -> None:
-    """ Fill triplestore with resources and triples """
-    resources.to_graph(graph)
-    for triple in triples:
-        graph.add(triple)
-
-
-def save_triplestore(graph: Graph, path: str = "") -> None:
+def save_triplestore(graph: Graph, path: str) -> None:
     """ Save triplestore into .ttl file """
     if path and path[-1] != "/":
         path += "/"
@@ -177,7 +181,7 @@ def build_triplestore(df: pd.DataFrame,
     resources.update(resources_ext)
 
     # Fill triplestore with resources and triples
-    fill_triplestore(graph, resources)
+    resources.to_graph(graph)
 
     # Save triplestore
     save_triplestore(graph, path=path)

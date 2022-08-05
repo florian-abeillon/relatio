@@ -1,9 +1,10 @@
 
 from rdflib import Graph, OWL, RDF, URIRef
+from typing import Optional
 
-from relatio.triplestore.namespaces import RELATIO, RELATIO_HD, RELATIO_LD
-from relatio.triplestore.resources import Class, Property, Resource
-from relatio.triplestore.utils import get_hash
+from .namespaces import RELATIO, RELATIO_HD, RELATIO_LD
+from .resources import Class, Property, Resource, ResourceStore
+from .utils import get_hash
 
             
 # Define base class and properties
@@ -23,8 +24,8 @@ IS_NEG_OF = Property('isNegOf', RELATIO, domain=ENTITY, range=ENTITY)
 class Instance(Resource):
     """ Instance of a class """
     
-    def __init__(self, label: str, namespace: str):
-        super().__init__(label, namespace)
+    def __init__(self, label: str, namespace: str, resources: Optional[ResourceStore] = None):
+        super().__init__(label, namespace, resources=resources)
         self._base_instance = None
         self._ld_instance = None
 
@@ -45,7 +46,7 @@ class Instance(Resource):
         super().to_graph(graph)
 
         if self._base_instance is not None:
-            graph.add(( self._base_instance, OWL.sameAs, self.iri ))
+            graph.add(( self._base_instance.iri, OWL.sameAs, self.iri ))
         if self._ld_instance is not None:
             graph.add(( self.iri, IS_HD_INSTANCE_OF.iri, self._ld_instance.iri ))
     
@@ -53,11 +54,14 @@ class Instance(Resource):
 class Relation(Instance):
     """ Relation between entities """
     
-    def __init__(self, label: str, namespace: str, is_neg: bool = False):
+    def __init__(self, label: str, 
+                       namespace: str, 
+                       is_neg: bool = False, 
+                       resources: Optional[ResourceStore] = None):
         if is_neg:
-            label = "not " + label
+            label = "not " + str(label)
         label = label.lower()
-        super().__init__(label, namespace)
+        super().__init__(label, namespace, resources=resources)
         self._neg_instance = None
         
     def set_neg_instance(self, neg_instance):
@@ -77,8 +81,8 @@ class Relation(Instance):
 class Entity(Instance):
     """ Entity, ie. a concept """
     
-    def __init__(self, label: str, namespace: str):
-        super().__init__(label, namespace)
+    def __init__(self, label: str, namespace: str, resources: Optional[ResourceStore] = None):
+        super().__init__(label, namespace, resources=resources)
         self._objects = set()
 
     def add_object(self, relation: Relation, object_: Instance):

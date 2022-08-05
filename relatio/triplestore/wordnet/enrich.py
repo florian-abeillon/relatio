@@ -1,16 +1,18 @@
 
 from spacy_wordnet.wordnet_annotator import WordnetAnnotator
-from typing import List, Tuple
+from typing import List
 
 import spacy
 
-from relatio.triplestore.wordnet.models import (
-    ENTITY_WN, IS_WN_INSTANCE_OF, RELATION_WN, 
-    HAS_LEMMA, DEFINITION, LEXNAME,
-    POS, SYNSET,
+from .models import (
+    ENTITY_WN, RELATION_WN, IS_WN_INSTANCE_OF,
+    DOMAIN, HAS_DOMAIN,
+    SYNSET, HAS_SYNSET, HAS_LEMMA, 
+    DEFINITION, LEXNAME, POS,
+    Domain, Synset,
     WnEntity, WnRelation
 )
-from relatio.triplestore.resources import ResourceStore
+from ..resources import ResourceStore
 
 # TODO
 # python -m nltk.downloader wordnet
@@ -23,42 +25,80 @@ nlp.add_pipe("spacy_wordnet", after='tagger', config={ 'lang': nlp.lang })
 
 def add_resources(resources: ResourceStore) -> None:
     """ Add WordNet classes and properties """
-    resources.get_or_add(ENTITY_WN)
-    resources.get_or_add(IS_WN_INSTANCE_OF)
-    resources.get_or_add(RELATION_WN)
-    resources.get_or_add(HAS_LEMMA)
-    resources.get_or_add(DEFINITION)
-    resources.get_or_add(LEXNAME)
-    resources.get_or_add(POS)
-    resources.get_or_add(SYNSET)
+
+    # Add classes
+    _ = resources.get_or_add(ENTITY_WN)
+    _ = resources.get_or_add(DOMAIN)
+    _ = resources.get_or_add(SYNSET)
+
+    # Add properties
+    _ = resources.get_or_add(RELATION_WN)
+    _ = resources.get_or_add(IS_WN_INSTANCE_OF)
+    _ = resources.get_or_add(HAS_DOMAIN)
+    _ = resources.get_or_add(HAS_SYNSET)
+    _ = resources.get_or_add(HAS_LEMMA)
+    _ = resources.get_or_add(DEFINITION)
+    _ = resources.get_or_add(LEXNAME)
+    _ = resources.get_or_add(POS)
 
 
-def get_wn_triples(entities: ResourceStore, relations: ResourceStore) -> Tuple[ResourceStore,
-                                                                               List[tuple]]:
+def build_instances(resources: ResourceStore, class_: type) -> None:
+    """ Build instances from WordNet results """
+
+    # Iterate over all resources
+    instances = list(resources.values())
+    for instance in instances:
+
+        instance_wn = nlp(instance._label)
+
+        # Overlook proper nouns
+        try:
+            if instance_wn.ents[0].label_ in [ 'PERSON', 'ORG' ]:
+                continue
+            token = instance_wn[0]
+        except IndexError:
+            continue
+
+        instance_wn = class_(token, resources=resources)
+        instance_wn.set_relatio_instance(instance)
+
+        # Add domains
+        domains = token._.wordnet.wordnet_domains()
+        for domain in domains:
+            domain = Domain(domain, resources=resources)
+            instance_wn.add_domain(domain)
+
+        # Add synsets
+        synsets = token._.wordnet.synsets()
+        for synset in synsets:
+
+            lemmas = synset.lemma_names()
+
+            synset = Synset(synset, resources=resources)
+
+            # If synset is new to resources
+            if synset not in resources:
+                # Add lemmas to synset
+                for lemma in lemmas:
+                    lemma = class_(lemma, resources)
+                    synset.add_lemma(lemma)
+
+            instance_wn.add_synset(synset)
+
+
+def build_wn_resources(entities: ResourceStore, relations: ResourceStore) -> ResourceStore:
     """ Main function """
 
     resources_wn = ResourceStore()
-    triples_wn = []
 
     # Add WordNet class and properties
     add_resources(resources_wn)
 
-    for entity in entities:
+    # Build WordNet instances from entities/relations
+    build_instances(entities, WnEntity)
+    build_instances(relations, WnRelation)
 
-        entity_wn = nlp(entity._label)
-
-        if entity_wn.ents and entity_wn.ents[0].label_ in [ 'PERSON', 'ORG' ]:
-            continue
-
-        instance = WnEntity(entity_wn)
-        instance.set_domains(entity_wn._.wordnet.wordnet_domains())
-
-        for synset in entity_wn._.wordnet.synsets():
-            synset = Synset(synset)
-            resources_wn.get_or_add(synset)
-            instance.add_synset(synset)
-
-    return resources_wn, triples_wn
+    return resources_wn
 
 
 

@@ -21,7 +21,7 @@ python -m pip install -U relatio
 
 # download SpaCy and NLTK additional resources
 python -m spacy download en_core_web_sm
-python -m nltk.downloader punkt wordnet stopwords averaged_perceptron_tagger
+python -m nltk.downloader punkt wordnet stopwords averaged_perceptron_tagger omw
 ```
 
 In case you want to use Jupyter make sure that you have it installed in the current environment.
