@@ -1,6 +1,5 @@
 
 from spacy_wordnet.wordnet_annotator import WordnetAnnotator
-from typing import List
 
 import spacy
 
@@ -14,9 +13,6 @@ from .models import (
 )
 from ..resources import ResourceStore
 
-# TODO
-# python -m nltk.downloader wordnet
-# python -m nltk.downloader omw
 
 nlp = spacy.load('en_core_web_sm')
 nlp.add_pipe("spacy_wordnet", after='tagger', config={ 'lang': nlp.lang })
@@ -42,6 +38,7 @@ def add_resources(resources: ResourceStore) -> None:
     _ = resources.get_or_add(POS)
 
 
+
 def build_instances(resources: ResourceStore, class_: type) -> None:
     """ Build instances from WordNet results """
 
@@ -51,8 +48,8 @@ def build_instances(resources: ResourceStore, class_: type) -> None:
 
         instance_wn = nlp(instance._label)
 
-        # Overlook proper nouns
         try:
+            # Overlook proper nouns
             if instance_wn.ents[0].label_ in [ 'PERSON', 'ORG' ]:
                 continue
             token = instance_wn[0]
@@ -63,27 +60,39 @@ def build_instances(resources: ResourceStore, class_: type) -> None:
         instance_wn.set_relatio_instance(instance)
 
         # Add domains
-        domains = token._.wordnet.wordnet_domains()
-        for domain in domains:
-            domain = Domain(domain, resource_store=resources)
-            instance_wn.add_domain(domain)
+        domains = [
+            Domain(domain, resource_store=resources)
+            for domain in token._.wordnet.wordnet_domains()
+        ]
+        instance_wn.set_domains(domains)
+
+        # Lemmas useless?
+        # # Add synsets
+        # synsets = []
+        # for synset in token._.wordnet.synsets():
+
+        #     lemmas = synset.lemma_names()
+
+        #     synset = Synset(synset, resource_store=resources)
+
+        #     # If synset is new to resources
+        #     if synset not in resources:
+        #         # Add lemmas to synset
+        #         lemmas = [
+        #             class_(lemma, resource_store=resources)
+        #             for lemma in lemmas
+        #         ]
+        #         synset.set_lemmas(lemmas)
+
+        #     synsets.append(synset)
 
         # Add synsets
-        synsets = token._.wordnet.synsets()
-        for synset in synsets:
+        synsets = [
+            Synset(synset, resource_store=resources)
+            for synset in token._.wordnet.synsets()
+        ]
+        instance_wn.set_synsets(synsets)
 
-            lemmas = synset.lemma_names()
-
-            synset = Synset(synset, resource_store=resources)
-
-            # If synset is new to resources
-            if synset not in resources:
-                # Add lemmas to synset
-                for lemma in lemmas:
-                    lemma = class_(lemma, resource_store=resources)
-                    synset.add_lemma(lemma)
-
-            instance_wn.add_synset(synset)
 
 
 def build_wn_resources(entities: ResourceStore, relations: ResourceStore) -> ResourceStore:

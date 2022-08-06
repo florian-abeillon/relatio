@@ -33,6 +33,7 @@ def add_resources(resources: ResourceStore) -> None:
     _ = resources.get_or_add(RELATION_WD)
 
 
+
 def add_eq_properties(resources: ResourceStore) -> None:
     """ Link equivalent properties """
         
@@ -47,6 +48,7 @@ def add_eq_properties(resources: ResourceStore) -> None:
         _ = resources.get_or_add(Triple(( prop1, OWL.sameAs, prop2 )))
 
 
+
 def clean_res(res: Dict[str, str]) -> List[Dict[str, Union[str, List[str]]]]:
     """ Format res and remove uninformative WikiData attributes """
 
@@ -55,29 +57,44 @@ def clean_res(res: Dict[str, str]) -> List[Dict[str, Union[str, List[str]]]]:
     for r in res['results']['bindings']:
 
         # Format results
-        r_clean = { key: value['value'] for key, value in r.items() }
+        r_clean = { 
+            'predicate': { 
+                'label': r['p_label']['value'], 
+                'iri': r['p_iri']['value'] 
+            } 
+        }
 
         # Parse o_list
-        o_list = r_clean['o_list'].split('|')
+        o_list = r['o_list']['value'].split('|')
+        objects, attributes = [], []
 
-        for i, o in enumerate(o_list):
+        for o in o_list:
             o = o.split("\\")
-            object_ = { 'o_label': o[0] }
-            if len(o) == 2:
-                object_['o_iri'] = o[1]
-            o_list[i] = object_
-        r_clean['o_list'] = o_list
 
+            if len(o) == 2:
+                object_ = { 'label': o[0], 'iri': o[1] }
+                objects.append(object_)
+            else:
+                attribute = { 'label': o[0] }
+                attributes.append(attribute)
+
+        r_clean['objects'] = objects
+        r_clean['attributes'] = attributes
+        
+
+        # TODO: To improve
+        # Whether to keep or not o_list
         if (
-            # TODO: To improve
             # If attribute is an ID, or
-            re.findall("ID( *\(.*\))? *$", r_clean['p_label']) or
+            re.findall("ID( *\(.*\))? *$", r_clean['predicate']['label']) or
+
             # If attribute label is in uppercase (likely not informative), or
-            r_clean['p_label'].isupper() or
+            r_clean['predicate']['label'].isupper() or
+
             # If attribute is a mixture of letters and numbers (likely not informative)
             (
-                not r_clean['o_list'][0]['o_label'].isalpha() and
-                not r_clean['o_list'][0]['o_label'].isnumeric()
+                not r_clean['attributes'][0]['label'].isalpha() and
+                not r_clean['attributes'][0]['label'].isnumeric()
             )
         ):
             continue
@@ -86,6 +103,7 @@ def clean_res(res: Dict[str, str]) -> List[Dict[str, Union[str, List[str]]]]:
 
     return res_clean
         
+
 
 # TODO: Add timer to regulate number of requests
 def query_wd(iri: str) -> List[Dict[str, str]]:
@@ -106,6 +124,7 @@ def query_wd(iri: str) -> List[Dict[str, str]]:
     return res
 
 
+
 def build_instances(entity: WdEntity, resources: ResourceStore) -> None:
     """ Build instances from WikiData results """
 
@@ -115,16 +134,26 @@ def build_instances(entity: WdEntity, resources: ResourceStore) -> None:
     for r in res:
 
         # Build and add relation property
-        relation = WdRelation(r['p_label'], iri=r['p_iri'], resource_store=resources)
+        relation = WdRelation(r['predicate']['label'], 
+                              iri=r['predicate']['iri'], 
+                              resource_store=resources)
 
-        for object_ in r['o_list']:
+        # Add objects to entity
+        objects = [
+            WdEntity(object_['label'], 
+                     iri=object_['iri'], 
+                     resource_store=resources)
+            for object_ in r['objects']
+        ]
+        entity.set_objects(relation, objects)
 
-            # If object is an entity
-            if len(object_) == 2:
-                object_ = WdEntity(object_['o_label'], iri=object_['o_iri'], resource_store=resources)
-                entity.add_object(relation, object_)
-            else:
-                entity.add_attribute(relation, object_['o_label'])
+        # Add attributes to entity
+        attributes = [
+            attribute['label']
+            for attribute in r['objects']
+        ]
+        entity.set_attributes(relation, attributes)
+
 
 
 def build_wd_resources(entities: ResourceStore) -> ResourceStore:

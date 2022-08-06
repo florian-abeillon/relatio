@@ -1,6 +1,6 @@
 
 from rdflib import Graph, Literal, RDF, URIRef
-from typing import Optional
+from typing import List, Optional
 
 from ..models import ENTITY, Instance
 from ..namespaces import WIKIDATA
@@ -14,13 +14,18 @@ RELATION_WD = Property('WdRelation', WIKIDATA, domain=ENTITY_WD, range=ENTITY_WD
 IS_WD_INSTANCE_OF = Property('isWDInstanceOf', WIKIDATA, domain=ENTITY_WD, range=ENTITY)
 
 
+
 class WdInstance(Resource):
     """ Wikidata instance of a class """
     
-    def __init__(self, label: str, iri: str = "", resource_store: Optional[ResourceStore] = None):
+    def __init__(self, label: str, 
+                       iri: str = "", 
+                       resource_store: Optional[ResourceStore] = None):
+
         super().__init__(label, WIKIDATA, resource_store=resource_store)
         if iri:
             self.iri = URIRef(iri)
+
 
     def get_iri(self) -> URIRef:
         """ Build unique resource identifier """
@@ -41,36 +46,34 @@ class WdRelation(WdInstance):
 class WdEntity(WdInstance):
     """ WikiData entity """
     
-    def __init__(self, ent, iri: str = "", resource_store: Optional[ResourceStore] = None):
+    def __init__(self, ent, 
+                       iri: str = "", 
+                       resource_store: Optional[ResourceStore] = None):
         
-        # If ent is a string (output of WikiData query)
-        if iri:
-            label = ent
         # If ent is an entity extracted with opentapioca
-        else:
-            label = ent.text
+        # (only WikiData results are passed an iri)
+        if not iri:
             iri = WIKIDATA + ent.kb_id_
             self._type = ent.label_
             self._desc = ent._.description
 
-        super().__init__(label, iri=iri, resource_store=resource_store)
+        super().__init__(ent, iri=iri, resource_store=resource_store)
         self._relatio_instance = None
         self._objects = set()
         self._attributes = set()
 
 
-    def set_relatio_instance(self, relatio_instance: Instance):
+    def set_relatio_instance(self, relatio_instance: Instance) -> None:
         """ Declare relatio instance of WikiData instance """
         self._relatio_instance = relatio_instance
 
+    def set_objects(self, relation: WdRelation, objects: List[WdInstance]) -> None:
+        """ Add relation of self to a list of objects """
+        self._objects = set([ ( relation, object_ ) for object_ in objects ])
 
-    def add_object(self, relation: WdRelation, object_: WdInstance):
-        """ Add relation of self to an object """
-        self._objects.add(( relation, object_ ))
-
-    def add_attribute(self, relation: WdRelation, attribute):
-        """ Add relation of self to an attribute """
-        self._attributes.add(( relation, attribute ))
+    def set_attributes(self, relation: WdRelation, attributes = list) -> None:
+        """ Add relation of self to a list of attributes """
+        self._attributes = set([ ( relation, attribute ) for attribute in attributes ])
 
 
     def to_graph(self, graph: Graph) -> None:

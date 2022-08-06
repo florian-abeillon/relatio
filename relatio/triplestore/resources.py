@@ -2,10 +2,12 @@
 from rdflib import Graph, Literal, RDF, RDFS, URIRef
 from typing import Optional
 
+
 to_pascal_case = lambda text: "".join([ 
     token[0].upper() + token[1:] 
     for token in text.replace("_", " ").split() 
 ])
+
 to_camel_case = lambda text: text[0].lower() + to_pascal_case(text)[1:]
 
 
@@ -25,11 +27,13 @@ class Triple(tuple):
         triple = ( s, p, o )
         return super().__new__(cls, triple)
     
+
     def __init__(self, triple: tuple):
         s, p, o = triple
         self._label = f"<{s}> <{p}> "
         self._label += f"<{o}>" if isinstance(o, URIRef) else o
         
+
     def __repr__(self) -> str:
         return self._label
     def __str__(self) -> str:
@@ -42,6 +46,7 @@ class Triple(tuple):
         graph.add(self)
 
 
+
 class Resource:
     """ Base triplestore resource """
 
@@ -50,15 +55,18 @@ class Resource:
         # If a ResourceStore is passed in kwargs
         resource_store = kwargs.pop('resource_store', None)
         if resource_store is not None:
-            resource = super().__new__(cls)
-            resource.__init__(*args, **kwargs)
-            # resource = cls(*args, **kwargs)
+            # Get or add resource from ResourceStore
+            resource = cls(*args, **kwargs)
             return resource_store.get_or_add(resource)
 
         # Otherwise, create resource as is
         return super().__new__(cls)
 
-    def __init__(self, label: str, namespace: str, resource_store: dict = None):
+
+    def __init__(self, label: str, 
+                       namespace: str, 
+                       resource_store: Optional[dict] = None):
+
         self._label = str(label)
         self._namespace = namespace
         self.iri = self.get_iri()
@@ -79,6 +87,7 @@ class Resource:
         graph.add(( self.iri, RDFS.label, Literal(self._label) ))
 
 
+
 class Class(Resource):
     """ Class of resources """
     
@@ -91,6 +100,7 @@ class Class(Resource):
         super().__init__(label, namespace, resource_store=resource_store)
         self._superclass = superclass
 
+
     def to_graph(self, graph: Graph) -> None:
         super().to_graph(graph)
         graph.add(( self.iri, RDFS.subClassOf, RDFS.Class ))
@@ -98,6 +108,7 @@ class Class(Resource):
         # If a superclass is mentionned, add subClassOf relation
         if self._superclass is not None:
             graph.add(( self.iri, RDFS.subClassOf, self._superclass.iri ))
+
 
 
 class Property(Resource):
@@ -128,6 +139,7 @@ class Property(Resource):
         if self._range is not None:
             range = self._range if isinstance(self._range, URIRef) else self._range.iri
             graph.add(( self.iri, RDFS.range, range ))           
+
 
 
 class ResourceStore(dict):

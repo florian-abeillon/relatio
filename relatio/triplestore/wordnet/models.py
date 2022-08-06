@@ -1,6 +1,6 @@
 
 from rdflib import Graph, Literal, RDF, RDFS
-from typing import Optional
+from typing import List, Optional, Set
 
 from ..namespaces import WORDNET
 from ..models import ENTITY, Instance
@@ -27,25 +27,32 @@ POS = Property('pos', WORDNET, domain=ENTITY_WN, range=RDFS.Literal)
 class Domain(Resource):
     """ WordNet domain """
 
-    def __init__(self, label: str, resource_store: Optional[ResourceStore] = None):
+    def __init__(self, label: str, 
+                       resource_store: Optional[ResourceStore] = None):
+
         super().__init__(label, WORDNET, resource_store=resource_store)
+
 
 
 class Synset(Resource):
     """ WordNet synonyms set """
 
-    def __init__(self, synset, resource_store: Optional[ResourceStore] = None):
+    def __init__(self, synset, 
+                       resource_store: Optional[ResourceStore] = None):
+
         super().__init__(synset.name(), WORDNET, resource_store=resource_store)
         self._definition = synset.definition()
         self._lexname = synset.lexname()
         self._pos = synset.pos()
         self._lemmas = set()
 
-    def add_lemma(self, lemma: Resource):
-        """ Add relation of self to a synset """
-        self._lemmas.add(lemma)
 
-    def to_graph(self, graph: str) -> None:
+    def set_lemmas(self, lemmas: List[Resource]) -> None:
+        """ Add relation of self to a synset """
+        self._lemmas = set(lemmas)
+
+
+    def to_graph(self, graph: Graph) -> None:
         """ Fill triplestore with synset lemmas and attributes """
         super().to_graph(graph)
         
@@ -64,23 +71,27 @@ class Synset(Resource):
 class WnInstance(Resource):
     """ WordNet instance of a class """
     
-    def __init__(self, entity, resource_store: Optional[ResourceStore] = None):
+    def __init__(self, entity, 
+                       resource_store: Optional[ResourceStore] = None):
+
         super().__init__(entity, WORDNET, resource_store=resource_store)
         self._relatio_instance = None
         self._domains = set()
         self._synsets = set()
 
-    def set_relatio_instance(self, relatio_instance: Instance):
+
+    def set_relatio_instance(self, relatio_instance: Instance) -> None:
         """ Declare relatio instance of WordNet instance """
         self._relatio_instance = relatio_instance
 
-    def add_domain(self, domain: Domain):
-        """ Add relation of self to a domain """
-        self._domains.add(domain)
+    def set_domains(self, domains: List[Domain]) -> None:
+        """ Add relation of self to a list of domains """
+        self._domains = set(domains)
 
-    def add_synset(self, synset: Synset):
-        """ Add relation of self to a synset """
-        self._synsets.add(synset)
+    def set_synsets(self, synsets: List[Synset]) -> None:
+        """ Add relation of self to a list of synsets """
+        self._synsets = set(synsets)
+
 
     def to_graph(self, graph: Graph) -> None:
         super().to_graph(graph)

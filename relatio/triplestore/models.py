@@ -24,10 +24,14 @@ IS_NEG_OF = Property('isNegOf', RELATIO, domain=ENTITY, range=ENTITY)
 class Instance(Resource):
     """ Instance of a class """
     
-    def __init__(self, label: str, namespace: str, resource_store: Optional[ResourceStore] = None):
+    def __init__(self, label: str, 
+                       namespace: str, 
+                       resource_store: Optional[ResourceStore] = None):
+
         super().__init__(label, namespace, resource_store=resource_store)
         self._base_instance = None
         self._ld_instance = None
+
 
     def get_iri(self) -> URIRef:
         """ Build unique resource identifier """
@@ -51,6 +55,7 @@ class Instance(Resource):
             graph.add(( self.iri, IS_HD_INSTANCE_OF.iri, self._ld_instance.iri ))
     
     
+
 class Relation(Instance):
     """ Relation between entities """
     
@@ -58,11 +63,13 @@ class Relation(Instance):
                        namespace: str, 
                        is_neg: bool = False, 
                        resource_store: Optional[ResourceStore] = None):
+
         if is_neg:
             label = "not " + str(label)
         label = label.lower()
         super().__init__(label, namespace, resource_store=resource_store)
         self._neg_instance = None
+
         
     def set_neg_instance(self, neg_instance):
         """ Declare negative relation of self """
@@ -77,13 +84,18 @@ class Relation(Instance):
             graph.add(( self.iri, IS_NEG_OF.iri, self._neg_instance.iri ))
             graph.add(( self._neg_instance.iri, IS_NEG_OF.iri, self.iri ))   
     
+
     
 class Entity(Instance):
     """ Entity, ie. a concept """
     
-    def __init__(self, label: str, namespace: str, resource_store: Optional[ResourceStore] = None):
+    def __init__(self, label: str, 
+                       namespace: str, 
+                       resource_store: Optional[ResourceStore] = None):
+
         super().__init__(label, namespace, resource_store=resource_store)
         self._objects = set()
+
 
     def add_object(self, relation: Relation, object_: Instance):
         """ Add relation of self to an object """

@@ -24,6 +24,7 @@ def bind_prefixes(graph: Graph, wikidata: bool, wordnet: bool) -> None:
     """ Bind prefixes to each base namespace """
 
     namespaces = [ RELATIO, RELATIO_HD, RELATIO_LD ]
+
     if wikidata:
         namespaces.append(WIKIDATA)
     if wordnet:
@@ -33,7 +34,8 @@ def bind_prefixes(graph: Graph, wikidata: bool, wordnet: bool) -> None:
         graph.bind(PREFIXES[namespace], namespace)
 
 
-def add_resources(entities: Dict[str, ResourceStore], relations: Dict[str, ResourceStore]) -> None:
+def add_resources(entities: Dict[str, ResourceStore], 
+                  relations: Dict[str, ResourceStore]) -> None:
     """ Add base classes and properties """
 
     # Add classes
@@ -56,19 +58,31 @@ def build_instance(class_: type,
                    **kwargs) -> Optional[Instance]:
     """ Build instance from label """
 
+    # Overlook NAs
     if pd.isna(label):
         return None
 
     # Create instance in base namespace
-    instance_base = class_(label, RELATIO, resource_store=resource_store['base'], **kwargs)
+    instance_base = class_(label, 
+                           RELATIO, 
+                           resource_store=resource_store['base'], 
+                           **kwargs)
 
     # Create non-negative instance if instance_base is neg
     if kwargs.get('is_neg', False):
-        instance_non_neg = class_(label, RELATIO, resource_store=resource_store['base'], is_neg=False)
+
+        instance_non_neg = class_(label, 
+                                  RELATIO, 
+                                  resource_store=resource_store['base'], 
+                                  is_neg=False)
+
         instance_non_neg.set_neg_instance(instance_base)
 
     # Create instance in appropriate namespace
-    instance = class_(label, namespace, resource_store=resource_store['hd_ld'], **kwargs)
+    instance = class_(label, 
+                      namespace, 
+                      resource_store=resource_store['hd_ld'], 
+                      **kwargs)
     instance.set_base_instance(instance_base)
 
     return instance
@@ -87,8 +101,17 @@ def build_instances(class_: type,
     kwargs_ld = kwargs.get('ld', {})
 
     # Create instances in HD/LD namespaces
-    instance_hd = build_instance(class_, label_hd, RELATIO_HD, resource_stores, **kwargs_hd)
-    instance_ld = build_instance(class_, label_ld, RELATIO_LD, resource_stores, **kwargs_ld)
+    instance_hd = build_instance(class_, 
+                                 label_hd, 
+                                 RELATIO_HD, 
+                                 resource_stores, 
+                                 **kwargs_hd)
+
+    instance_ld = build_instance(class_, 
+                                 label_ld, 
+                                 RELATIO_LD, 
+                                 resource_stores, 
+                                 **kwargs_ld)
 
     # Set isHDInstanceOf property
     if not ( instance_hd is None or instance_ld is None ):
@@ -97,7 +120,8 @@ def build_instances(class_: type,
     return instance_hd, instance_ld
 
 
-def build_resources(df: pd.DataFrame) -> Tuple[Dict[str, ResourceStore], Dict[str, ResourceStore]]:
+def build_resources(df: pd.DataFrame) -> Tuple[Dict[str, ResourceStore], 
+                                               Dict[str, ResourceStore]]:
     """ Build list of triples from sets of entities/property """
 
     entities = { 'base': ResourceStore(), 'hd_ld': ResourceStore() }
