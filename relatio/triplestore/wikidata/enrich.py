@@ -46,6 +46,7 @@ def add_eq_properties(resources: ResourceStore) -> None:
 
     for prop1, prop2 in equivalent_props:
         _ = resources.get_or_add(Triple(( prop1, OWL.sameAs, prop2 )))
+        _ = resources.get_or_add(Triple(( prop2, OWL.sameAs, prop1 )))
 
 
 
@@ -167,15 +168,19 @@ def build_wd_resources(entities: ResourceStore) -> ResourceStore:
     add_eq_properties(resources_wd)
 
     # Iterate over every base entity
-    for entity in entities:
+    for entity in entities.values():
+        print(entity._label)
 
         # Extract named entities
         try:
             entity_wd = nlp(entity._label)
+            print(entity_wd)
             entity_wd = entity_wd.ents[0]
+            print(entity_wd)
         except IndexError:
+            print()
             continue
-
+        print()
         # Build WikiData entity
         entity_wd = WdEntity(entity_wd, resource_store=resources_wd)
         entity_wd.set_relatio_instance(entity)

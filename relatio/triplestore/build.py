@@ -9,7 +9,7 @@ from .wordnet import build_wn_resources
 from .models import (
     ENTITY, ENTITY_HD, ENTITY_LD,
     RELATION, RELATION_HD, RELATION_LD,
-    IS_HD_INSTANCE_OF, IS_NEG_OF,
+    IS_HD_INSTANCE_OF,
     Entity, Instance, Relation
 )
 from .resources import ResourceStore
@@ -48,7 +48,6 @@ def add_resources(entities: Dict[str, ResourceStore],
     _ = relations['hd_ld'].get_or_add(RELATION_HD)
     _ = relations['hd_ld'].get_or_add(RELATION_LD)
     _ = relations['base'].get_or_add(IS_HD_INSTANCE_OF)
-    _ = relations['base'].get_or_add(IS_NEG_OF)
 
 
 def build_instance(class_: type,

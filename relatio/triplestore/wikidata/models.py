@@ -11,12 +11,12 @@ from ..utils import get_hash
 # Define WikiData class and properties
 ENTITY_WD = Class('WdEntity', WIKIDATA)
 RELATION_WD = Property('WdRelation', WIKIDATA, domain=ENTITY_WD, range=ENTITY_WD)
-IS_WD_INSTANCE_OF = Property('isWDInstanceOf', WIKIDATA, domain=ENTITY_WD, range=ENTITY)
+IS_WD_INSTANCE_OF = Property('isWdInstanceOf', WIKIDATA, domain=ENTITY_WD, range=ENTITY)
 
 
 
 class WdInstance(Resource):
-    """ Wikidata instance of a class """
+    """ WikiData instance of a class """
     
     def __init__(self, label: str, 
                        iri: str = "", 
@@ -36,6 +36,14 @@ class WdInstance(Resource):
 
 class WdRelation(WdInstance):
     """ WikiData relation """
+    
+    def __init__(self, ent, 
+                       iri: str = "", 
+                       resource_store: Optional[ResourceStore] = None):
+
+        label = str(ent).lower()
+        super().__init__(label, iri=iri, resource_store=resource_store)
+
 
     def to_graph(self, graph: Graph) -> None:
         super().to_graph(graph)
@@ -57,7 +65,8 @@ class WdEntity(WdInstance):
             self._type = ent.label_
             self._desc = ent._.description
 
-        super().__init__(ent, iri=iri, resource_store=resource_store)
+        label = str(ent).capitalize()
+        super().__init__(label, iri=iri, resource_store=resource_store)
         self._relatio_instance = None
         self._objects = set()
         self._attributes = set()

@@ -17,7 +17,6 @@ RELATION_HD = Property('relation', RELATIO_HD, superproperty=RELATION, domain=EN
 RELATION_LD = Property('relation', RELATIO_LD, superproperty=RELATION, domain=ENTITY_LD, range=ENTITY_LD)
 
 IS_HD_INSTANCE_OF = Property('isHDInstanceOf', RELATIO, domain=ENTITY_HD, range=ENTITY_LD)
-IS_NEG_OF = Property('isNegOf', RELATIO, domain=ENTITY, range=ENTITY)
 
 
 
@@ -51,6 +50,7 @@ class Instance(Resource):
 
         if self._base_instance is not None:
             graph.add(( self._base_instance.iri, OWL.sameAs, self.iri ))
+            graph.add(( self.iri, OWL.sameAs, self._base_instance.iri ))
         if self._ld_instance is not None:
             graph.add(( self.iri, IS_HD_INSTANCE_OF.iri, self._ld_instance.iri ))
     
@@ -81,8 +81,8 @@ class Relation(Instance):
         
         # Add two-way link with negated relation 
         if self._neg_instance is not None:
-            graph.add(( self.iri, IS_NEG_OF.iri, self._neg_instance.iri ))
-            graph.add(( self._neg_instance.iri, IS_NEG_OF.iri, self.iri ))   
+            graph.add(( self.iri, OWL.inverseOf, self._neg_instance.iri ))
+            graph.add(( self._neg_instance.iri, OWL.inverseOf, self.iri ))   
     
 
     
@@ -93,6 +93,7 @@ class Entity(Instance):
                        namespace: str, 
                        resource_store: Optional[ResourceStore] = None):
 
+        label = label.capitalize()
         super().__init__(label, namespace, resource_store=resource_store)
         self._objects = set()
 

@@ -52,12 +52,15 @@ def build_instances(resources: ResourceStore, class_: type) -> None:
             # Overlook proper nouns
             if instance_wn.ents[0].label_ in [ 'PERSON', 'ORG' ]:
                 continue
+            # TODO: Not keep only the first entity
             token = instance_wn[0]
         except IndexError:
             continue
 
         instance_wn = class_(token, resource_store=resources)
+        # TODO: Adds relation to HD/LD instances as well, because of owl:sameAs relation?
         instance_wn.set_relatio_instance(instance)
+
 
         # Add domains
         domains = [
@@ -66,31 +69,26 @@ def build_instances(resources: ResourceStore, class_: type) -> None:
         ]
         instance_wn.set_domains(domains)
 
-        # Lemmas useless?
-        # # Add synsets
-        # synsets = []
-        # for synset in token._.wordnet.synsets():
-
-        #     lemmas = synset.lemma_names()
-
-        #     synset = Synset(synset, resource_store=resources)
-
-        #     # If synset is new to resources
-        #     if synset not in resources:
-        #         # Add lemmas to synset
-        #         lemmas = [
-        #             class_(lemma, resource_store=resources)
-        #             for lemma in lemmas
-        #         ]
-        #         synset.set_lemmas(lemmas)
-
-        #     synsets.append(synset)
 
         # Add synsets
-        synsets = [
-            Synset(synset, resource_store=resources)
-            for synset in token._.wordnet.synsets()
-        ]
+        synsets = []
+        for synset in token._.wordnet.synsets():
+
+            lemmas = synset.lemma_names()
+
+            synset = Synset(synset, resource_store=resources)
+
+            # If synset is new to resources
+            if synset not in resources:
+                # Add lemmas to synset
+                lemmas = [
+                    class_(lemma, resource_store=resources)
+                    for lemma in lemmas
+                ]
+                synset.set_lemmas(lemmas)
+
+            synsets.append(synset)
+
         instance_wn.set_synsets(synsets)
 
 

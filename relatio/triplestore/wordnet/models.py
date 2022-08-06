@@ -30,6 +30,7 @@ class Domain(Resource):
     def __init__(self, label: str, 
                        resource_store: Optional[ResourceStore] = None):
 
+        label = label.capitalize()
         super().__init__(label, WORDNET, resource_store=resource_store)
 
 
@@ -71,10 +72,10 @@ class Synset(Resource):
 class WnInstance(Resource):
     """ WordNet instance of a class """
     
-    def __init__(self, entity, 
+    def __init__(self, label: str, 
                        resource_store: Optional[ResourceStore] = None):
 
-        super().__init__(entity, WORDNET, resource_store=resource_store)
+        super().__init__(label, WORDNET, resource_store=resource_store)
         self._relatio_instance = None
         self._domains = set()
         self._synsets = set()
@@ -105,16 +106,32 @@ class WnInstance(Resource):
             graph.add(( self.iri, HAS_SYNSET.iri, synset.iri ))
 
 
+
 class WnEntity(WnInstance):
     """ WordNet entity """
+    
+    def __init__(self, entity, 
+                       resource_store: Optional[ResourceStore] = None):
+
+        label = str(entity).capitalize()
+        super().__init__(label, resource_store=resource_store)
+
 
     def to_graph(self, graph: Graph) -> None:
         super().to_graph(graph)
         graph.add(( self.iri, RDF.type, ENTITY_WN.iri ))
 
 
+
 class WnRelation(WnInstance):
     """ WordNet relation """
+    
+    def __init__(self, entity, 
+                       resource_store: Optional[ResourceStore] = None):
+
+        label = str(entity).lower()
+        super().__init__(label, resource_store=resource_store)
+
 
     def to_graph(self, graph: Graph) -> None:
         super().to_graph(graph)

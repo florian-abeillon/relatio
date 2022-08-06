@@ -1,5 +1,5 @@
 
-from rdflib import Graph, Literal, RDF, RDFS, URIRef
+from rdflib import Graph, Literal, OWL, RDF, RDFS, URIRef
 from typing import Optional
 
 
@@ -103,7 +103,7 @@ class Class(Resource):
 
     def to_graph(self, graph: Graph) -> None:
         super().to_graph(graph)
-        graph.add(( self.iri, RDFS.subClassOf, RDFS.Class ))
+        graph.add(( self.iri, RDFS.subClassOf, OWL.Class ))
         
         # If a superclass is mentionned, add subClassOf relation
         if self._superclass is not None:
