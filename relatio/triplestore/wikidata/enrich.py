@@ -115,13 +115,13 @@ def build_instances(entity: WdEntity, resources: ResourceStore) -> None:
     for r in res:
 
         # Build and add relation property
-        relation = WdRelation(r['p_label'], iri=r['p_iri'], resources=resources)
+        relation = WdRelation(r['p_label'], iri=r['p_iri'], resource_store=resources)
 
         for object_ in r['o_list']:
 
             # If object is an entity
             if len(object_) == 2:
-                object_ = WdEntity(object_['o_label'], iri=object_['o_iri'], resources=resources)
+                object_ = WdEntity(object_['o_label'], iri=object_['o_iri'], resource_store=resources)
                 entity.add_object(relation, object_)
             else:
                 entity.add_attribute(relation, object_['o_label'])
@@ -148,7 +148,7 @@ def build_wd_resources(entities: ResourceStore) -> ResourceStore:
             continue
 
         # Build WikiData entity
-        entity_wd = WdEntity(entity_wd, resources=resources_wd)
+        entity_wd = WdEntity(entity_wd, resource_store=resources_wd)
         entity_wd.set_relatio_instance(entity)
 
         # Query WikiData, and add triples

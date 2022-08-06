@@ -24,8 +24,8 @@ IS_NEG_OF = Property('isNegOf', RELATIO, domain=ENTITY, range=ENTITY)
 class Instance(Resource):
     """ Instance of a class """
     
-    def __init__(self, label: str, namespace: str, resources: Optional[ResourceStore] = None):
-        super().__init__(label, namespace, resources=resources)
+    def __init__(self, label: str, namespace: str, resource_store: Optional[ResourceStore] = None):
+        super().__init__(label, namespace, resource_store=resource_store)
         self._base_instance = None
         self._ld_instance = None
 
@@ -57,11 +57,11 @@ class Relation(Instance):
     def __init__(self, label: str, 
                        namespace: str, 
                        is_neg: bool = False, 
-                       resources: Optional[ResourceStore] = None):
+                       resource_store: Optional[ResourceStore] = None):
         if is_neg:
             label = "not " + str(label)
         label = label.lower()
-        super().__init__(label, namespace, resources=resources)
+        super().__init__(label, namespace, resource_store=resource_store)
         self._neg_instance = None
         
     def set_neg_instance(self, neg_instance):
@@ -81,8 +81,8 @@ class Relation(Instance):
 class Entity(Instance):
     """ Entity, ie. a concept """
     
-    def __init__(self, label: str, namespace: str, resources: Optional[ResourceStore] = None):
-        super().__init__(label, namespace, resources=resources)
+    def __init__(self, label: str, namespace: str, resource_store: Optional[ResourceStore] = None):
+        super().__init__(label, namespace, resource_store=resource_store)
         self._objects = set()
 
     def add_object(self, relation: Relation, object_: Instance):

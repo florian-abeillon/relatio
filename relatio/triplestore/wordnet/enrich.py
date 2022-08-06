@@ -59,13 +59,13 @@ def build_instances(resources: ResourceStore, class_: type) -> None:
         except IndexError:
             continue
 
-        instance_wn = class_(token, resources=resources)
+        instance_wn = class_(token, resource_store=resources)
         instance_wn.set_relatio_instance(instance)
 
         # Add domains
         domains = token._.wordnet.wordnet_domains()
         for domain in domains:
-            domain = Domain(domain, resources=resources)
+            domain = Domain(domain, resource_store=resources)
             instance_wn.add_domain(domain)
 
         # Add synsets
@@ -74,13 +74,13 @@ def build_instances(resources: ResourceStore, class_: type) -> None:
 
             lemmas = synset.lemma_names()
 
-            synset = Synset(synset, resources=resources)
+            synset = Synset(synset, resource_store=resources)
 
             # If synset is new to resources
             if synset not in resources:
                 # Add lemmas to synset
                 for lemma in lemmas:
-                    lemma = class_(lemma, resources)
+                    lemma = class_(lemma, resource_store=resources)
                     synset.add_lemma(lemma)
 
             instance_wn.add_synset(synset)

@@ -60,15 +60,15 @@ def build_instance(class_: type,
         return None
 
     # Create instance in base namespace
-    instance_base = class_(label, RELATIO, resources=resource_store['base'], **kwargs)
+    instance_base = class_(label, RELATIO, resource_store=resource_store['base'], **kwargs)
 
     # Create non-negative instance if instance_base is neg
     if kwargs.get('is_neg', False):
-        instance_non_neg = class_(label, RELATIO, resources=resource_store['base'], is_neg=False)
+        instance_non_neg = class_(label, RELATIO, resource_store=resource_store['base'], is_neg=False)
         instance_non_neg.set_neg_instance(instance_base)
 
     # Create instance in appropriate namespace
-    instance = class_(label, namespace, resources=resource_store['hd_ld'], **kwargs)
+    instance = class_(label, namespace, resource_store=resource_store['hd_ld'], **kwargs)
     instance.set_base_instance(instance_base)
 
     return instance

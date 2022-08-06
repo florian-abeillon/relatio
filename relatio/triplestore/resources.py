@@ -48,17 +48,17 @@ class Resource:
     def __new__(cls, *args, **kwargs):
 
         # If a ResourceStore is passed in kwargs
-        resources = kwargs.pop('resources', None)
-        if resources is not None:
+        resource_store = kwargs.pop('resource_store', None)
+        if resource_store is not None:
             resource = super().__new__(cls)
             resource.__init__(*args, **kwargs)
             # resource = cls(*args, **kwargs)
-            return resources.get_or_add(resource)
+            return resource_store.get_or_add(resource)
 
         # Otherwise, create resource as is
         return super().__new__(cls)
 
-    def __init__(self, label: str, namespace: str, resources: dict = None):
+    def __init__(self, label: str, namespace: str, resource_store: dict = None):
         self._label = str(label)
         self._namespace = namespace
         self.iri = self.get_iri()
@@ -85,10 +85,10 @@ class Class(Resource):
     def __init__(self, label: str, 
                        namespace: str,
                        superclass: Optional[Resource] = None, 
-                       resources: Optional[dict] = None):
+                       resource_store: Optional[dict] = None):
 
         label = to_pascal_case(label)
-        super().__init__(label, namespace, resources=resources)
+        super().__init__(label, namespace, resource_store=resource_store)
         self._superclass = superclass
 
     def to_graph(self, graph: Graph) -> None:
@@ -108,10 +108,10 @@ class Property(Resource):
                        superproperty: Optional[Resource] = None,
                        domain: Optional[Class] = None,
                        range: Optional[Class] = None,
-                       resources: Optional[dict] = None):
+                       resource_store: Optional[dict] = None):
 
         label = to_camel_case(label)
-        super().__init__(label, namespace, resources=resources)
+        super().__init__(label, namespace, resource_store=resource_store)
         self._superproperty = superproperty
         self._domain = domain
         self._range = range

@@ -27,15 +27,15 @@ POS = Property('pos', WORDNET, domain=ENTITY_WN, range=RDFS.Literal)
 class Domain(Resource):
     """ WordNet domain """
 
-    def __init__(self, label: str, resources: Optional[ResourceStore] = None):
-        super().__init__(label, WORDNET, resources=resources)
+    def __init__(self, label: str, resource_store: Optional[ResourceStore] = None):
+        super().__init__(label, WORDNET, resource_store=resource_store)
 
 
 class Synset(Resource):
     """ WordNet synonyms set """
 
-    def __init__(self, synset, resources: Optional[ResourceStore] = None):
-        super().__init__(synset.name(), WORDNET, resources=resources)
+    def __init__(self, synset, resource_store: Optional[ResourceStore] = None):
+        super().__init__(synset.name(), WORDNET, resource_store=resource_store)
         self._definition = synset.definition()
         self._lexname = synset.lexname()
         self._pos = synset.pos()
@@ -64,8 +64,8 @@ class Synset(Resource):
 class WnInstance(Resource):
     """ WordNet instance of a class """
     
-    def __init__(self, entity, resources: Optional[ResourceStore] = None):
-        super().__init__(entity, WORDNET, resources=resources)
+    def __init__(self, entity, resource_store: Optional[ResourceStore] = None):
+        super().__init__(entity, WORDNET, resource_store=resource_store)
         self._relatio_instance = None
         self._domains = set()
         self._synsets = set()

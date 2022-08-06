@@ -17,8 +17,8 @@ IS_WD_INSTANCE_OF = Property('isWDInstanceOf', WIKIDATA, domain=ENTITY_WD, range
 class WdInstance(Resource):
     """ Wikidata instance of a class """
     
-    def __init__(self, label: str, iri: str = "", resources: Optional[ResourceStore] = None):
-        super().__init__(label, WIKIDATA, resources=resources)
+    def __init__(self, label: str, iri: str = "", resource_store: Optional[ResourceStore] = None):
+        super().__init__(label, WIKIDATA, resource_store=resource_store)
         if iri:
             self.iri = URIRef(iri)
 
@@ -41,7 +41,7 @@ class WdRelation(WdInstance):
 class WdEntity(WdInstance):
     """ WikiData entity """
     
-    def __init__(self, ent, iri: str = "", resources: Optional[ResourceStore] = None):
+    def __init__(self, ent, iri: str = "", resource_store: Optional[ResourceStore] = None):
         
         # If ent is a string (output of WikiData query)
         if iri:
@@ -53,7 +53,7 @@ class WdEntity(WdInstance):
             self._type = ent.label_
             self._desc = ent._.description
 
-        super().__init__(label, iri=iri, resources=resources)
+        super().__init__(label, iri=iri, resource_store=resource_store)
         self._relatio_instance = None
         self._objects = set()
         self._attributes = set()
