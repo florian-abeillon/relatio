@@ -16,7 +16,10 @@ WHERE {{
     # Get every triple with uri as a subject
     <{iri}> ?p ?o_iri .
 
-    # Overlook WikiData statements (duplicate, unstructured information)
+    # TODO: Add UNION
+    # ?s ?p_s <{iri}> .
+
+    # Overlook Wikidata statements (duplicate, unstructured information)
     FILTER( !STRSTARTS( STR(?o_iri), "http://www.wikidata.org/entity/statement/" ) )
 
     # Get IRI of predicate ?p

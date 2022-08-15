@@ -4,27 +4,29 @@ from typing import Dict, Optional, Tuple
 
 import pandas as pd
 
-from .wikidata import build_wd_resources
-from .wordnet import build_wn_resources
+from .spacy.enrich import build_sp_resources
+from .wikidata.enrich import build_wd_resources
+from .wordnet.enrich import build_wn_resources
 from .models import (
-    ENTITY, ENTITY_HD, ENTITY_LD,
-    RELATION, RELATION_HD, RELATION_LD,
-    IS_HD_INSTANCE_OF,
-    Entity, Instance, Relation
+    CLASSES_AND_PROPS,
+    ReEntity, ReInstance, ReRelation
 )
 from .resources import ResourceStore
 from .namespaces import (
-    PREFIXES, RELATIO, RELATIO_HD, 
-    RELATIO_LD, WIKIDATA, WORDNET
+    PREFIXES, 
+    RELATIO, RELATIO_HD, RELATIO_LD, 
+    SPACY, WIKIDATA, WORDNET
 )
 
 
 
-def bind_prefixes(graph: Graph, wikidata: bool, wordnet: bool) -> None:
+def bind_prefixes(graph: Graph, spacy: bool, wikidata: bool, wordnet: bool) -> None:
     """ Bind prefixes to each base namespace """
 
     namespaces = [ RELATIO, RELATIO_HD, RELATIO_LD ]
 
+    if spacy:
+        namespaces.append(SPACY)
     if wikidata:
         namespaces.append(WIKIDATA)
     if wordnet:
@@ -34,89 +36,56 @@ def bind_prefixes(graph: Graph, wikidata: bool, wordnet: bool) -> None:
         graph.bind(PREFIXES[namespace], namespace)
 
 
-def add_resources(entities: Dict[str, ResourceStore], 
-                  relations: Dict[str, ResourceStore]) -> None:
-    """ Add base classes and properties """
-
-    # Add classes
-    _ = entities['base'].get_or_add(ENTITY)
-    _ = entities['hd_ld'].get_or_add(ENTITY_HD)
-    _ = entities['hd_ld'].get_or_add(ENTITY_LD)
-
-    # Add properties
-    _ = relations['base'].get_or_add(RELATION)
-    _ = relations['hd_ld'].get_or_add(RELATION_HD)
-    _ = relations['hd_ld'].get_or_add(RELATION_LD)
-    _ = relations['base'].get_or_add(IS_HD_INSTANCE_OF)
-
-
 def build_instance(class_: type,
                    label: str, 
-                   namespace: str,
-                   resource_store: Dict[str, ResourceStore],
-                   **kwargs) -> Optional[Instance]:
+                   resource_stores: Dict[str, ResourceStore],
+                   hd: bool = False,
+                   **kwargs) -> Optional[ReInstance]:
     """ Build instance from label """
 
     # Overlook NAs
     if pd.isna(label):
         return None
 
-    # Create instance in base namespace
-    instance_base = class_(label, 
-                           RELATIO, 
-                           resource_store=resource_store['base'], 
-                           **kwargs)
-
-    # Create non-negative instance if instance_base is neg
-    if kwargs.get('is_neg', False):
-
-        instance_non_neg = class_(label, 
-                                  RELATIO, 
-                                  resource_store=resource_store['base'], 
-                                  is_neg=False)
-
-        instance_non_neg.set_neg_instance(instance_base)
-
     # Create instance in appropriate namespace
-    instance = class_(label, 
-                      namespace, 
-                      resource_store=resource_store['hd_ld'], 
-                      **kwargs)
-    instance.set_base_instance(instance_base)
-
-    return instance
+    return class_(label, resource_stores['hd_ld'], 
+                  hd=hd, ld=not hd, resource_store_base=resource_stores['base'],
+                  **kwargs)
 
 
-def build_instances(class_: type, 
-                    row: pd.Series, 
-                    key: str, 
-                    resource_stores: Dict[str, ResourceStore],
-                    **kwargs) -> Tuple[Instance, Instance]:
+def build_hd_ld_instances(class_: type, 
+                          row: pd.Series, 
+                          key: str, 
+                          resource_stores: Dict[str, ResourceStore],
+                          **kwargs) -> Tuple[ReInstance, ReInstance]:
     """ Build HD/LD instances from extracted concepts """
 
-    label_hd = row[f"{key}_highdim"]
-    label_ld = row[f"{key}_lowdim"]
-    kwargs_hd = kwargs.get('hd', {})
-    kwargs_ld = kwargs.get('ld', {})
-
     # Create instances in HD/LD namespaces
-    instance_hd = build_instance(class_, 
-                                 label_hd, 
-                                 RELATIO_HD, 
-                                 resource_stores, 
-                                 **kwargs_hd)
+    instance_hd = build_instance(class_, row[f"{key}_highdim"], resource_stores,
+                                 hd=True, **kwargs.get('hd', {}))
 
-    instance_ld = build_instance(class_, 
-                                 label_ld, 
-                                 RELATIO_LD, 
-                                 resource_stores, 
-                                 **kwargs_ld)
+    instance_ld = build_instance(class_, row[f"{key}_lowdim"], resource_stores, 
+                                 hd=False, **kwargs.get('ld', {}))
 
     # Set isHDInstanceOf property
     if not ( instance_hd is None or instance_ld is None ):
         instance_hd.set_ld_instance(instance_ld)
         
     return instance_hd, instance_ld
+
+
+def add_relation(subject: ReEntity, relation: ReRelation, object_: ReEntity) -> None:
+    """ Add relation from subject to object  """
+
+    if relation is None or ( subject is None and object_ is None ):
+        return
+
+    if subject is None:
+        subject = object_
+    elif object_ is None:
+        object_ = subject
+    
+    subject.add_object(relation, object_)
 
 
 def build_resources(df: pd.DataFrame) -> Tuple[Dict[str, ResourceStore], 
@@ -126,46 +95,41 @@ def build_resources(df: pd.DataFrame) -> Tuple[Dict[str, ResourceStore],
     entities = { 'base': ResourceStore(), 'hd_ld': ResourceStore() }
     relations = { 'base': ResourceStore(), 'hd_ld': ResourceStore() }
 
-    # Add base classes and properties
-    add_resources(entities, relations)
-
     # Iterate over each set of entities/property
     for _, row in df.iterrows():
         
         # Build subject/object entities
-        subject_hd, subject_ld = build_instances(Entity, row, 'ARG0', entities)
-        object_hd, object_ld = build_instances(Entity, row, 'ARG1', entities)
+        subject_hd, subject_ld = build_hd_ld_instances(ReEntity, row, 'ARG0', entities)
+        object_hd,  object_ld  = build_hd_ld_instances(ReEntity, row, 'ARG1', entities)
         
         # Build relation property
         kwargs = { 
-            'hd': { 'is_neg': row['B-ARGM-NEG_highdim'] }, 
-            'ld': { 'is_neg': row['B-ARGM-NEG_lowdim'] } 
+            'hd': { 'is_neg': row['B-ARGM-NEG_highdim'] }, 'ld': { 'is_neg': row['B-ARGM-NEG_lowdim']  } 
         }
-        relation_hd, relation_ld = build_instances(Relation, row, 'B-V', relations, **kwargs)
+        relation_hd, relation_ld = build_hd_ld_instances(ReRelation, row, 'B-V', relations, **kwargs)
         
         # Add HD/LD relations to objects
-        if not ( subject_hd is None or relation_hd is None ):
-            if object_hd is None:
-                object_hd = subject_hd
-            subject_hd.add_object(relation_hd, object_hd)
-
-        if not ( subject_ld is None or relation_ld is None ):
-            if object_ld is None:
-                object_ld = subject_ld
-            subject_ld.add_object(relation_ld, object_ld) 
+        add_relation(subject_hd, relation_hd, object_hd)
+        add_relation(subject_ld, relation_ld, object_ld)
 
     return entities, relations
 
 
-def enrich_triplestore(wikidata: bool, 
-                       wordnet: bool, 
-                       entities: ResourceStore, 
-                       relations: ResourceStore) -> ResourceStore:
+def get_ext_data(spacy: bool, 
+                 wikidata: bool, 
+                 wordnet: bool, 
+                 entities: ResourceStore, 
+                 relations: ResourceStore) -> ResourceStore:
     """ Fetch external data """
 
     resources = ResourceStore()
 
-    # Enrich entities list with WikiData data
+    # Enrich entities list with SpaCy data
+    if spacy:
+        resources_sp = build_sp_resources(entities)
+        resources.update(resources_sp)
+
+    # Enrich entities list with Wikidata data
     if wikidata:
         resources_wd = build_wd_resources(entities)
         resources.update(resources_wd)
@@ -186,25 +150,56 @@ def save_triplestore(graph: Graph, path: str) -> None:
 
 
 def build_triplestore(df: pd.DataFrame, 
+                      spacy: bool = False, 
                       wikidata: bool = False, 
                       wordnet: bool = False, 
-                      path: str = "") -> None:
+                      path: str = "") -> Graph:
     """ Main function """
 
     # Initialize triplestore
     graph = Graph()
-    bind_prefixes(graph, wikidata, wordnet)
+    bind_prefixes(graph, spacy, wikidata, wordnet)
 
-    # Build instances
+    # Build resources
+    classes_and_props = ResourceStore(CLASSES_AND_PROPS)
     entities, relations = build_resources(df)
-    resources = entities['base'] | entities['hd_ld'] | relations['base'] | relations['hd_ld']
+
+    # TODO: Add contains property
 
     # Enrich triplestore with external data
-    resources_ext = enrich_triplestore(wikidata, wordnet, entities['base'], relations['base'])
-    resources.update(resources_ext)
+    resources_ext = get_ext_data(spacy, wikidata, wordnet, entities['base'], relations['base'])
 
-    # Fill triplestore with resources and triples
+    # Fill triplestore with resources
+    resources = classes_and_props | entities['base'] | entities['hd_ld'] | relations['base'] | relations['hd_ld']
+    resources.update(resources_ext)
     resources.to_graph(graph)
 
     # Save triplestore
     save_triplestore(graph, path=path)
+
+    return graph
+
+
+def enrich_triplestore(path: str,
+                       df: pd.DataFrame, 
+                       spacy: bool = False, 
+                       wikidata: bool = False, 
+                       wordnet: bool = False) -> Graph:
+    """ Secondary function """
+    assert spacy or wikidata or wordnet, "Please provide one external source of information"
+
+    # Initialize triplestore
+    graph = Graph()
+    graph.parse(path, format='n3')
+
+    # Enrich triplestore with external data
+    entities, relations = build_resources(df)
+    resources_ext = get_ext_data(spacy, wikidata, wordnet, entities['base'], relations['base'])
+
+    # Fill triplestore with resources
+    resources_ext.to_graph(graph)
+
+    # Save triplestore
+    save_triplestore(graph, path=path)
+
+    return graph

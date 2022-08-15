@@ -1,16 +1,15 @@
 
+from spacy.tokens.doc import Doc
 from spacy_wordnet.wordnet_annotator import WordnetAnnotator
+from typing import List
 
 import spacy
 
 from .models import (
-    ENTITY_WN, RELATION_WN, IS_WN_INSTANCE_OF,
-    DOMAIN, HAS_DOMAIN,
-    SYNSET, HAS_SYNSET, HAS_LEMMA, 
-    DEFINITION, LEXNAME, POS,
-    Domain, Synset,
+    CLASSES_AND_PROPS_WN,
     WnEntity, WnRelation
 )
+from ..models import ReEntity, ReRelation
 from ..resources import ResourceStore
 
 
@@ -19,91 +18,51 @@ nlp.add_pipe("spacy_wordnet", after='tagger', config={ 'lang': nlp.lang })
 
 
 
-def add_resources(resources: ResourceStore) -> None:
-    """ Add WordNet classes and properties """
-
-    # Add classes
-    _ = resources.get_or_add(ENTITY_WN)
-    _ = resources.get_or_add(DOMAIN)
-    _ = resources.get_or_add(SYNSET)
-
-    # Add properties
-    _ = resources.get_or_add(RELATION_WN)
-    _ = resources.get_or_add(IS_WN_INSTANCE_OF)
-    _ = resources.get_or_add(HAS_DOMAIN)
-    _ = resources.get_or_add(HAS_SYNSET)
-    _ = resources.get_or_add(HAS_LEMMA)
-    _ = resources.get_or_add(DEFINITION)
-    _ = resources.get_or_add(LEXNAME)
-    _ = resources.get_or_add(POS)
+def remove_ents(sentence: Doc, labels: List[str] = [ 'PERSON', 'ORG' ]) -> Doc:
+    """ Remove entities with specific labels from sentence """
+    for ent in sentence.ents:
+        if ent.label_ in labels:
+            start, end = ent.start_char, ent.end_char
+            sentence = sentence[start:end]
+    return sentence
 
 
-
-def build_instances(resources: ResourceStore, class_: type) -> None:
+def build_instances(class_: type,
+                    class_wn: type,
+                    resources: ResourceStore, 
+                    resources_wn: ResourceStore) -> None:
     """ Build instances from WordNet results """
 
     # Iterate over all resources
     instances = list(resources.values())
     for instance in instances:
 
-        instance_wn = nlp(instance._label)
+        # NER on instance
+        label = nlp(instance._label)
+        # Remove Person/Organization entities
+        label = remove_ents(label)
 
-        try:
-            # Overlook proper nouns
-            if instance_wn.ents[0].label_ in [ 'PERSON', 'ORG' ]:
-                continue
-            # TODO: Not keep only the first entity
-            token = instance_wn[0]
-        except IndexError:
-            continue
+        for instance_wn in label:
 
-        instance_wn = class_(token, resource_store=resources)
-        # TODO: Adds relation to HD/LD instances as well, because of owl:sameAs relation?
-        instance_wn.set_relatio_instance(instance)
+            # Build partOf Relatio entity
+            re_instance = class_(instance_wn, resources)
+            instance.add_partOf_instance(re_instance)
 
-
-        # Add domains
-        domains = [
-            Domain(domain, resource_store=resources)
-            for domain in token._.wordnet.wordnet_domains()
-        ]
-        instance_wn.set_domains(domains)
-
-
-        # Add synsets
-        synsets = []
-        for synset in token._.wordnet.synsets():
-
-            lemmas = synset.lemma_names()
-
-            synset = Synset(synset, resource_store=resources)
-
-            # If synset is new to resources
-            if synset not in resources:
-                # Add lemmas to synset
-                lemmas = [
-                    class_(lemma, resource_store=resources)
-                    for lemma in lemmas
-                ]
-                synset.set_lemmas(lemmas)
-
-            synsets.append(synset)
-
-        instance_wn.set_synsets(synsets)
+            # Build WordNet entity, and link them to Relatio entity
+            instance_wn = class_wn(instance_wn, resources_wn)
+            instance_wn.set_re_instance(re_instance)
 
 
 
 def build_wn_resources(entities: ResourceStore, relations: ResourceStore) -> ResourceStore:
     """ Main function """
 
-    resources_wn = ResourceStore()
-
-    # Add WordNet class and properties
-    add_resources(resources_wn)
+    # Initialize ResourceStore with WordNet class and properties
+    resources_wn = ResourceStore(CLASSES_AND_PROPS_WN)
 
     # Build WordNet instances from entities/relations
-    build_instances(entities, WnEntity)
-    build_instances(relations, WnRelation)
+    build_instances(ReEntity,   WnEntity,   entities,  resources_wn)
+    build_instances(ReRelation, WnRelation, relations, resources_wn)
 
     return resources_wn
 

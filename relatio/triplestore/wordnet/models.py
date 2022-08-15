@@ -1,56 +1,67 @@
 
-from rdflib import Graph, Literal, RDF, RDFS
-from typing import List, Optional, Set
+from nltk.corpus.reader.wordnet import Synset
+from rdflib import Graph, OWL, RDFS, SKOS, Literal
+from spacy.tokens.token import Token
+from typing import List, Union
+
+import warnings
 
 from ..namespaces import WORDNET
-from ..models import ENTITY, Instance
-from ..resources import Class, Property, Resource, ResourceStore
+from ..models import ReInstance
+from ..resources import Class, Instance, Property, ResourceStore, Triple
+from ..utils import add_two_way
 
 
 # Define WordNet class and properties
-ENTITY_WN = Class('WnEntity', WORDNET)
-RELATION_WN = Property('WnRelation', WORDNET, domain=ENTITY_WN, range=ENTITY_WN)
-IS_WN_INSTANCE_OF = Property('isWnInstanceOf', WORDNET, domain=ENTITY_WN, range=ENTITY)
+ENTITY_WN = Class('Entity', WORDNET)
+DOMAIN_WN = Class('Domain', WORDNET)
+SYNSET_WN = Class('Synset', WORDNET)
 
-DOMAIN = Class('Domain', WORDNET)
-HAS_DOMAIN = Property('hasDomain', WORDNET, domain=ENTITY_WN, range=DOMAIN)
+RELATION_WN = Property('Relation',   WORDNET                                      )
+HAS_DOMAIN  = Property('hasDomain',  WORDNET, domain=ENTITY_WN, range=DOMAIN_WN   )
+HAS_SYNSET  = Property('hasSynset',  WORDNET, domain=ENTITY_WN, range=SYNSET_WN   )
+LEXNAME     = Property('lexname',    WORDNET, domain=ENTITY_WN, range=RDFS.Literal)
+POS         = Property('pos',        WORDNET, domain=ENTITY_WN, range=RDFS.Literal)
 
-SYNSET = Class('Synset', WORDNET)
-HAS_SYNSET = Property('hasSynset', WORDNET, domain=ENTITY_WN, range=SYNSET)
-HAS_LEMMA = Property('hasLemma', WORDNET, domain=ENTITY_WN, range=ENTITY_WN)
-DEFINITION = Property('definition', WORDNET, domain=ENTITY_WN, range=RDFS.Literal)
-LEXNAME = Property('lexname', WORDNET, domain=ENTITY_WN, range=RDFS.Literal)
-POS = Property('pos', WORDNET, domain=ENTITY_WN, range=RDFS.Literal)
+CLASSES_AND_PROPS_WN = [
+    ENTITY_WN, DOMAIN_WN, SYNSET_WN,
+    RELATION_WN, HAS_DOMAIN, HAS_SYNSET,
+    LEXNAME, POS
+]
 
 
 
-class Domain(Resource):
+class WnDomain(Instance):
     """ WordNet domain """
 
-    def __init__(self, label: str, 
-                       resource_store: Optional[ResourceStore] = None):
-
-        label = label.capitalize()
-        super().__init__(label, WORDNET, resource_store=resource_store)
+    def __init__(self, label: str, resource_store: ResourceStore):
+        label = label.replace("_", " ").capitalize()
+        super().__init__(label, WORDNET, DOMAIN_WN, resource_store)
 
 
 
-class Synset(Resource):
+class WnSynset(Instance):
     """ WordNet synonyms set """
 
-    def __init__(self, synset, 
-                       resource_store: Optional[ResourceStore] = None):
+    def __init__(self, synset: Synset, class_: type, resource_store: ResourceStore):
+        super().__init__(synset.name(), WORDNET, SYNSET_WN, resource_store)
 
-        super().__init__(synset.name(), WORDNET, resource_store=resource_store)
-        self._definition = synset.definition()
-        self._lexname = synset.lexname()
-        self._pos = synset.pos()
-        self._lemmas = set()
+        # If instance not already in ResourceStore, set it
+        if self.to_set:
+            # TODO: Sometimes not empty?
+            self._definition = synset.definition().capitalize()
+            self._lexname = synset.lexname()
+            self._pos = synset.pos()
+    #         self._lemmas = self.set_lemmas(synset, class_, resource_store)
 
 
-    def set_lemmas(self, lemmas: List[Resource]) -> None:
-        """ Add relation of self to a synset """
-        self._lemmas = set(lemmas)
+    # @staticmethod
+    # def set_lemmas(synset: Synset, class_: type, resource_store: ResourceStore) -> List[Instance]:
+    #     """ Add relation of self to a synset """
+    #     return [ 
+    #         class_(lemma, resource_store, to_set=False) 
+    #         for lemma in synset.lemma_names() 
+    #     ]
 
 
     def to_graph(self, graph: Graph) -> None:
@@ -58,81 +69,79 @@ class Synset(Resource):
         super().to_graph(graph)
         
         if self._definition:
-            graph.add(( self.iri, DEFINITION.iri, Literal(self._definition) ))
+            graph.add(Triple( self.iri, SKOS.definition, Literal(self._definition) ))
         if self._lexname:
-            graph.add(( self.iri, LEXNAME.iri, Literal(self._lexname) ))
+            graph.add(Triple( self.iri, LEXNAME.iri, Literal(self._lexname) ))
         if self._pos:
-            graph.add(( self.iri, POS.iri, Literal(self._pos) ))
+            graph.add(Triple( self.iri, POS.iri, Literal(self._pos) ))
 
-        for lemma in self._lemmas:
-            graph.add(( self.iri, HAS_LEMMA.iri, lemma.iri ))
+        # for lemma in self._lemmas:
+        #     graph.add(Triple( lemma.iri, HAS_SYNSET.iri, self.iri ))
 
 
 
-class WnInstance(Resource):
-    """ WordNet instance of a class """
+class WnInstance(Instance):
+    """ WordNet instance of a class/property """
     
-    def __init__(self, label: str, 
-                       resource_store: Optional[ResourceStore] = None):
+    def __init__(self, token: Token,
+                       type_: Union[Class, Property],
+                       resource_store: ResourceStore):
 
-        super().__init__(label, WORDNET, resource_store=resource_store)
-        self._relatio_instance = None
-        self._domains = set()
-        self._synsets = set()
+        super().__init__(token, WORDNET, type_, resource_store)
+
+        # If instance not already in ResourceStore, set it
+        if self.to_set:
+            self._domains = self.set_domains(token._.wordnet.wordnet_domains(), resource_store)
+            self._synsets = self.set_synsets(token._.wordnet.synsets(), resource_store)
+            self._re_instance = None
 
 
-    def set_relatio_instance(self, relatio_instance: Instance) -> None:
-        """ Declare relatio instance of WordNet instance """
-        self._relatio_instance = relatio_instance
-
-    def set_domains(self, domains: List[Domain]) -> None:
+    @staticmethod
+    def set_domains(domains: list, resource_store: ResourceStore) -> List[WnDomain]:
         """ Add relation of self to a list of domains """
-        self._domains = set(domains)
+        return [
+            WnDomain(domain, resource_store)
+            for domain in domains
+        ]
 
-    def set_synsets(self, synsets: List[Synset]) -> None:
+    def set_synsets(self, synsets: list, resource_store: ResourceStore) -> List[WnSynset]:
         """ Add relation of self to a list of synsets """
-        self._synsets = set(synsets)
+        return [
+            WnSynset(synset, self.__class__, resource_store)
+            for synset in synsets
+        ]
+
+    def set_re_instance(self, re_instance: ReInstance) -> None:
+        """ Add Relatio instance of WordNet instance """
+        self._re_instance = re_instance
 
 
     def to_graph(self, graph: Graph) -> None:
         super().to_graph(graph)
-        
-        if self._relatio_instance is not None:
-            graph.add(( self.iri, IS_WN_INSTANCE_OF.iri, self._relatio_instance.iri ))
 
         for domain in self._domains:
-            graph.add(( self.iri, HAS_DOMAIN.iri, Literal(domain) ))
+            graph.add(Triple( self.iri, HAS_DOMAIN.iri, domain.iri ))
         for synset in self._synsets:
-            graph.add(( self.iri, HAS_SYNSET.iri, synset.iri ))
+            graph.add(Triple( self.iri, HAS_SYNSET.iri, synset.iri ))
+
+        # Add link to Relatio instance
+        if self._re_instance is not None:
+            add_two_way(graph, Triple( self.iri, OWL.sameAs, self._re_instance.iri ))
+        else:
+            warnings.warn(f"WdEntity {self._label} created without any linked ReInstance")
 
 
 
 class WnEntity(WnInstance):
     """ WordNet entity """
     
-    def __init__(self, entity, 
-                       resource_store: Optional[ResourceStore] = None):
-
-        label = str(entity).capitalize()
-        super().__init__(label, resource_store=resource_store)
-
-
-    def to_graph(self, graph: Graph) -> None:
-        super().to_graph(graph)
-        graph.add(( self.iri, RDF.type, ENTITY_WN.iri ))
+    def __init__(self, token, resource_store: ResourceStore):
+        super().__init__(token, ENTITY_WN, resource_store)
 
 
 
 class WnRelation(WnInstance):
     """ WordNet relation """
     
-    def __init__(self, entity, 
-                       resource_store: Optional[ResourceStore] = None):
-
-        label = str(entity).lower()
-        super().__init__(label, resource_store=resource_store)
-
-
-    def to_graph(self, graph: Graph) -> None:
-        super().to_graph(graph)
-        graph.add(( self.iri, RDF.type, RELATION_WN.iri ))
+    def __init__(self, token, resource_store: ResourceStore):
+        super().__init__(token, RELATION_WN, resource_store)

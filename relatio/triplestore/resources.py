@@ -1,35 +1,29 @@
 
-from rdflib import Graph, Literal, OWL, RDF, RDFS, URIRef
-from typing import Optional
+from rdflib import Graph, Literal, OWL, RDF, RDFS, SKOS, URIRef
+from typing import List, Optional, Union
 
-
-to_pascal_case = lambda text: "".join([ 
-    token[0].upper() + token[1:] 
-    for token in text.replace("_", " ").split() 
-])
-
-to_camel_case = lambda text: text[0].lower() + to_pascal_case(text)[1:]
+from .namespaces import PREFIXES
+from .utils import get_hash, to_camel_case, to_pascal_case
 
 
 
 class Triple(tuple):
     """ RDF triple """
 
-    def __new__(cls, triple: tuple):
-        assert len(triple) == 3
-
-        s, p, o = triple
+    def __new__(cls, s, p, o, attribute: bool = True):
+        
         if not isinstance(s, URIRef):
             s = URIRef(s)
         if not isinstance(p, URIRef):
             p = URIRef(p)
+        if not attribute or ( not isinstance(o, URIRef) and o.startswith("http://") ):
+            o = URIRef(o)
             
         triple = ( s, p, o )
         return super().__new__(cls, triple)
     
 
-    def __init__(self, triple: tuple):
-        s, p, o = triple
+    def __init__(self, s, p, o, **kwargs):
         self._label = f"<{s}> <{p}> "
         self._label += f"<{o}>" if isinstance(o, URIRef) else o
         
@@ -40,6 +34,11 @@ class Triple(tuple):
         return self._label
     def __hash__(self) -> str:
         return hash(self._label)
+
+    def inverse(self) -> tuple:
+        """ Returns inverse of self """
+        s, p, o = self
+        return Triple( o, p, s )
         
     def to_graph(self, graph: Graph) -> None:
         """ Fill triplestore with triple """
@@ -50,26 +49,11 @@ class Triple(tuple):
 class Resource:
     """ Base triplestore resource """
 
-    def __new__(cls, *args, **kwargs):
-
-        # If a ResourceStore is passed in kwargs
-        resource_store = kwargs.pop('resource_store', None)
-        if resource_store is not None:
-            # Get or add resource from ResourceStore
-            resource = cls(*args, **kwargs)
-            return resource_store.get_or_add(resource)
-
-        # Otherwise, create resource as is
-        return super().__new__(cls)
-
-
-    def __init__(self, label: str, 
-                       namespace: str, 
-                       resource_store: Optional[dict] = None):
-
+    def __init__(self, label: str, namespace: str, iri: Optional[URIRef] = None):
         self._label = str(label)
+        self._alt_label = f"{PREFIXES[namespace]}:{self._label}"
         self._namespace = namespace
-        self.iri = self.get_iri()
+        self.iri = iri if iri is not None else self.get_iri()
         
     def __repr__(self) -> str:
         return self._label
@@ -84,30 +68,23 @@ class Resource:
 
     def to_graph(self, graph: Graph) -> None:
         """ Fill triplestore with resource's label """
-        graph.add(( self.iri, RDFS.label, Literal(self._label) ))
+        graph.add(Triple( self.iri, SKOS.prefLabel, Literal(self._label) ))
+        graph.add(Triple( self.iri, SKOS.altLabel, Literal(self._alt_label) ))
 
 
 
 class Class(Resource):
     """ Class of resources """
     
-    def __init__(self, label: str, 
-                       namespace: str,
-                       superclass: Optional[Resource] = None, 
-                       resource_store: Optional[dict] = None):
+    def __init__(self, label: str, namespace: str):
 
         label = to_pascal_case(label)
-        super().__init__(label, namespace, resource_store=resource_store)
-        self._superclass = superclass
+        super().__init__(label, namespace)
 
 
     def to_graph(self, graph: Graph) -> None:
         super().to_graph(graph)
-        graph.add(( self.iri, RDFS.subClassOf, OWL.Class ))
-        
-        # If a superclass is mentionned, add subClassOf relation
-        if self._superclass is not None:
-            graph.add(( self.iri, RDFS.subClassOf, self._superclass.iri ))
+        graph.add(Triple( self.iri, RDFS.subClassOf, OWL.Class ))
 
 
 
@@ -116,26 +93,22 @@ class Property(Resource):
     
     def __init__(self, label: str, 
                        namespace: str, 
-                       superproperty: Optional[Resource] = None,
                        domain: Optional[Class] = None,
-                       range: Optional[Class] = None,
-                       resource_store: Optional[dict] = None):
+                       range: Optional[Class] = None):
 
         label = to_camel_case(label)
-        super().__init__(label, namespace, resource_store=resource_store)
-        self._superproperty = superproperty
+        super().__init__(label, namespace)
         self._domain = domain
         self._range = range
 
+
     def to_graph(self, graph: Graph) -> None:
         super().to_graph(graph)
-        graph.add(( self.iri, RDF.type, RDF.Property ))
-        
-        if self._superproperty is not None:
-            graph.add(( self.iri, RDFS.subPropertyOf, self._superproperty.iri )) 
+        graph.add(Triple( self.iri, RDFS.subPropertyOf, RDF.Property ))
 
+        # If a domain/range is mentionned, add appropriate relation
         if self._domain is not None:
-            graph.add(( self.iri, RDFS.domain, self._domain.iri )) 
+            graph.add(Triple( self.iri, RDFS.domain, self._domain.iri ))
         if self._range is not None:
             range = self._range if isinstance(self._range, URIRef) else self._range.iri
             graph.add(( self.iri, RDFS.range, range ))           
@@ -145,9 +118,12 @@ class Property(Resource):
 class ResourceStore(dict):
     """ Store of resources to be filled into triplestore """
 
+    def __init__(self, resources: List[Resource] = []):
+        for resource in resources:
+            self[resource] = resource
+
     def __or__(self, resource_store: dict) -> dict:
-        self.update(resource_store)
-        return self
+        return ResourceStore({ **self, **resource_store })
 
     def get_or_add(self, resource: Resource) -> Resource:
         """ Get a resource from self, or add it to self if necessary """
@@ -159,3 +135,36 @@ class ResourceStore(dict):
         """ Fill triplestore with every resource from self """
         for resource in self.values():
             resource.to_graph(graph)
+
+
+
+class Instance(Resource):
+    """ Instance of class/property """
+
+
+    def __init__(self, label: str, 
+                       namespace: str, 
+                       type_: Union[Class, Property],
+                       resource_store: ResourceStore,
+                       iri: Optional[URIRef] = None):
+
+        super().__init__(label, namespace, iri=iri)
+        
+        # Get or add resource from ResourceStore
+        self.to_set = not self in resource_store
+        self = resource_store.get_or_add(self)
+
+        # If instance not already in ResourceStore, set it
+        if self.to_set:
+            self._type = type_
+            self._alt_label = f"{PREFIXES[self._namespace]}:{self._type._label}/{self._label}"
+
+
+    def get_iri(self) -> URIRef:
+        """ Build unique resource identifier """
+        key = get_hash(self.__class__.__name__, self._label)
+        return URIRef(self._namespace + key)
+
+    def to_graph(self, graph: Graph) -> None:
+        super().to_graph(graph)
+        graph.add(Triple( self.iri, RDF.type, self._type.iri ))
