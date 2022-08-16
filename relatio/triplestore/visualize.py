@@ -23,7 +23,7 @@ def get_triples(res) -> List[Triple]:
     for triple in res:
         triple = [ el.toPython() for el in triple ]
         triple[1] = prettify(triple[1])
-        triples.append(Triple(*triple, attribute=False))
+        triples.append(Triple(*triple))
     return triples
 
 

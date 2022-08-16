@@ -10,13 +10,13 @@ from .utils import get_hash, to_camel_case, to_pascal_case
 class Triple(tuple):
     """ RDF triple """
 
-    def __new__(cls, s, p, o, attribute: bool = True):
+    def __new__(cls, s, p, o):
         
-        if not isinstance(s, URIRef):
+        if not isinstance(s, URIRef) and s.startswith("http://"):
             s = URIRef(s)
-        if not isinstance(p, URIRef):
+        if not isinstance(p, URIRef) and p.startswith("http://"):
             p = URIRef(p)
-        if not attribute or ( not isinstance(o, URIRef) and o.startswith("http://") ):
+        if not isinstance(o, URIRef) and o.startswith("http://"):
             o = URIRef(o)
             
         triple = ( s, p, o )
@@ -24,8 +24,8 @@ class Triple(tuple):
     
 
     def __init__(self, s, p, o, **kwargs):
-        self._label = f"<{s}> <{p}> "
-        self._label += f"<{o}>" if isinstance(o, URIRef) else o
+        label = ", ".join([ f"<{el}>" for el in ( s, p, o ) ])
+        self._label = f"( {label} )"
         
 
     def __repr__(self) -> str:
