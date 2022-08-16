@@ -1,8 +1,9 @@
 
 from rdflib import Graph
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 import pandas as pd
+import re
 
 from .spacy.enrich import build_sp_resources
 from .wikidata.enrich import build_wd_resources
@@ -88,6 +89,21 @@ def add_relation(subject: ReEntity, relation: ReRelation, object_: ReEntity) -> 
     subject.add_object(relation, object_)
 
 
+def link_partOf_instances(instances: Union[List[ReEntity], List[ReRelation]]) -> None:
+    """ Link partOf instances to their containing instance  """
+    for key, instance in instances.items():
+        for instance_partOf in instances.values():
+            if (
+                # If instance_partOf is contained in instance, and
+                re.search(fr"\b{instance_partOf._label}\b", instance._label) and 
+                # Instance_partOf is not exactly instance, and
+                instance._label != instance_partOf._label and
+                # Instance_partOf is not negated instance
+                instance._label != "not " + instance_partOf._label
+            ):
+                instances[key].add_partOf_instance(instance_partOf)
+
+
 def build_resources(df: pd.DataFrame) -> Tuple[Dict[str, ResourceStore], 
                                                Dict[str, ResourceStore]]:
     """ Build list of triples from sets of entities/property """
@@ -111,6 +127,10 @@ def build_resources(df: pd.DataFrame) -> Tuple[Dict[str, ResourceStore],
         # Add HD/LD relations to objects
         add_relation(subject_hd, relation_hd, object_hd)
         add_relation(subject_ld, relation_ld, object_ld)
+
+    # Link partOf instances
+    link_partOf_instances(entities['base'])
+    link_partOf_instances(relations['base'])
 
     return entities, relations
 
@@ -163,8 +183,6 @@ def build_triplestore(df: pd.DataFrame,
     # Build resources
     classes_and_props = ResourceStore(CLASSES_AND_PROPS)
     entities, relations = build_resources(df)
-
-    # TODO: Add contains property
 
     # Enrich triplestore with external data
     resources_ext = get_ext_data(spacy, wikidata, wordnet, entities['base'], relations['base'])
