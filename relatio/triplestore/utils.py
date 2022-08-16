@@ -1,6 +1,4 @@
 
-from rdflib import Graph
-
 import hashlib
 
 
@@ -17,7 +15,7 @@ to_pascal_case = lambda text: "".join([
 to_camel_case = lambda text: text[0].lower() + to_pascal_case(text)[1:]
 
 
-def add_two_way(graph: Graph, triple: tuple) -> None:
-    """ Add triple and its inverse to graph """
-    graph.add(triple)
-    graph.add(triple.inverse())
+def add_two_way(graph_or_resource_store, triple: tuple) -> None:
+    """ Add triple and its inverse to graph/ResourceStore """
+    graph_or_resource_store.add(triple)
+    graph_or_resource_store.add(triple.inverse())

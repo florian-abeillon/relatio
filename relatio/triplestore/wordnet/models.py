@@ -70,10 +70,19 @@ class WnSynset(Instance):
         
         if self._definition:
             graph.add(Triple( self.iri, SKOS.definition, Literal(self._definition) ))
+        else:
+            warnings.warn(f"WnSynset {self._label} created without any definition")
+        
         if self._lexname:
             graph.add(Triple( self.iri, LEXNAME.iri, Literal(self._lexname) ))
+        else:
+            warnings.warn(f"WnSynset {self._label} created without any lexname")
+        
         if self._pos:
             graph.add(Triple( self.iri, POS.iri, Literal(self._pos) ))
+        else:
+            warnings.warn(f"WnSynset {self._label} created without any pos")
+        
 
         # for lemma in self._lemmas:
         #     graph.add(Triple( lemma.iri, HAS_SYNSET.iri, self.iri ))

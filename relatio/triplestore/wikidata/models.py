@@ -82,6 +82,8 @@ class WdEntity(WdInstance):
             graph.add(Triple( self.iri, relation.iri, object_.iri ))
         for relation, attribute in self._attributes:
             graph.add(Triple( self.iri, relation.iri, Literal(attribute) ))
+        if not self._objects and not self._attributes:
+            warnings.warn(f"WdEntity {self._label} created without any linked WdEntity nor attribute")
 
         # Add link to Relatio entity
         if self._re_entity is not None:

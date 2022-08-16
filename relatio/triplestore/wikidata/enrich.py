@@ -17,6 +17,7 @@ from .models import (
 from ..models import ReEntity
 from ..namespaces import WIKIDATA
 from ..resources import ResourceStore, Triple
+from ..utils import add_two_way
 
 
 nlp = spacy.load("en_core_web_sm")
@@ -28,21 +29,6 @@ path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'query.sparql')
 with open(path) as f:
     QUERY = f.read()
 
-
-
-def add_eq_wd_properties(resources: ResourceStore) -> None:
-    """ Link equivalent properties """
-        
-    # From https://www.wikidata.org/wiki/Wikidata:Relation_between_properties_in_RDF_and_in_Wikidata
-    equivalent_props = [
-        ( URIRef(WIKIDATA + 'P31'),   RDF.type           ),
-        ( URIRef(WIKIDATA + 'P279'),  RDFS.subClassOf    ),
-        ( URIRef(WIKIDATA + 'P1647'), RDFS.subPropertyOf )
-    ]
-
-    for prop1, prop2 in equivalent_props:
-        resources.add(Triple( prop1, OWL.sameAs, prop2 ))
-        resources.add(Triple( prop2, OWL.sameAs, prop1 ))
 
 
 def clean_res(res: Dict[str, str]) -> List[Dict[str, Union[str, List[str]]]]:
@@ -85,10 +71,8 @@ def clean_res(res: Dict[str, str]) -> List[Dict[str, Union[str, List[str]]]]:
             # Whether to keep or not object/attribute
             if (
                 not o or not o[0] or 
-
                 # If attribute is a mixture of letters and numbers, or
                 ( not o[0].isalpha() and not o[0].isnumeric() ) or
-
                 # If attribute is likely not informative (Wikidata ID, or like 'Category:', 'Template:', etc.)
                 re.match(r"Q\d+", o[0]) or re.match(r"[A-Z][a-z]+\:\w+", o[0])
             ):
@@ -176,14 +160,26 @@ def init_wd_instance(entity_wd: Span,
 
 
 
+def add_eq_wd_properties(resources: ResourceStore) -> None:
+    """ Link equivalent properties """
+        
+    # From https://www.wikidata.org/wiki/Wikidata:Relation_between_properties_in_RDF_and_in_Wikidata
+    equivalent_props = [
+        ( URIRef(WIKIDATA + 'P31'),   RDF.type           ),
+        ( URIRef(WIKIDATA + 'P279'),  RDFS.subClassOf    ),
+        ( URIRef(WIKIDATA + 'P1647'), RDFS.subPropertyOf )
+    ]
+
+    for prop1, prop2 in equivalent_props:
+        add_two_way(resources, Triple( prop1, OWL.sameAs, prop2 ))
+
+
+
 def build_wd_resources(resources: ResourceStore) -> ResourceStore:
     """ Main function """
 
     # Initialize ResourceStore with Wikidata class and properties
     resources_wd = ResourceStore(CLASSES_AND_PROPS_WD)
-
-    # Link equivalent properties
-    add_eq_wd_properties(resources)
 
     # Iterate over every base entity
     entities = list(resources.values())
@@ -207,5 +203,7 @@ def build_wd_resources(resources: ResourceStore) -> ResourceStore:
 
             init_wd_instance(entity_wd, re_entity, resources_wd)
 
+    # Link equivalent properties
+    add_eq_wd_properties(resources)
 
     return resources_wd

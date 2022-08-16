@@ -10,13 +10,13 @@ SELECT ?p_iri
         ) AS ?o_list 
        )
 
-       # To get list of subjects, per predicate
-       ( 
-        GROUP_CONCAT( 
-            IF( ISIRI(?s_iri), CONCAT( ?s_label, "\\", STR(?s_iri) ), ?s_label ) ; 
-            SEPARATOR = "|" 
-        ) AS ?s_list 
-       )
+    #    # To get list of subjects, per predicate
+    #    ( 
+    #     GROUP_CONCAT( 
+    #         IF( ISIRI(?s_iri), CONCAT( ?s_label, "\\", STR(?s_iri) ), ?s_label ) ; 
+    #         SEPARATOR = "|" 
+    #     ) AS ?s_list 
+    #    )
        
 
 WHERE {{
@@ -39,23 +39,23 @@ WHERE {{
             ?o_iri rdfs:label ?o_label .
         }}
 
-    }} UNION {{
+    # }} UNION {{
             
-        # Get every triple with uri as object
-        ?s_iri ?p <{iri}> .
+    #     # Get every triple with uri as object
+    #     ?s_iri ?p <{iri}> .
 
-        # Overlook Wikidata statements (duplicate, unstructured information)
-        FILTER( !STRSTARTS( STR(?o_iri), "http://www.wikidata.org/entity/statement/" ) )
+    #     # Overlook Wikidata statements (duplicate, unstructured information)
+    #     FILTER( !STRSTARTS( STR(?o_iri), "http://www.wikidata.org/entity/statement/" ) )
 
-        # Get IRI of predicate ?p
-        ?p_iri wikibase:claim|wikibase:directClaim ?p .
+    #     # Get IRI of predicate ?p
+    #     ?p_iri wikibase:claim|wikibase:directClaim ?p .
 
-        # Get English label of predicate and subject (if exist)
-        SERVICE wikibase:label {{
-            bd:serviceParam wikibase:language "en" .
-            ?p_iri rdfs:label ?p_label .
-            ?s_iri rdfs:label ?s_label .
-        }}
+    #     # Get English label of predicate and subject (if exist)
+    #     SERVICE wikibase:label {{
+    #         bd:serviceParam wikibase:language "en" .
+    #         ?p_iri rdfs:label ?p_label .
+    #         ?s_iri rdfs:label ?s_label .
+    #     }}
 
     }}
 
