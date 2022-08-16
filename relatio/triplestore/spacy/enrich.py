@@ -1,4 +1,6 @@
 
+from spacy.tokens.span import Span
+
 import spacy
 
 from .models import CLASSES_AND_PROPS_SP, SpEntity
@@ -8,6 +10,15 @@ from ..resources import ResourceStore
 
 nlp = spacy.load("en_core_web_sm")
 
+
+
+def init_sp_instance(entity_sp: Span, 
+                     entity: ReEntity,
+                     resources_sp: ResourceStore) -> None:
+    """ Initialize SpaCy instances """
+
+    entity_sp = SpEntity(entity_sp, resources_sp)
+    entity_sp.set_re_entity(entity)
 
 
 def build_sp_resources(resources: ResourceStore) -> ResourceStore:
@@ -28,19 +39,14 @@ def build_sp_resources(resources: ResourceStore) -> ResourceStore:
             continue
 
         if ents[0].label_.lower() == entity._label.lower():
-            # Build SpaCy entity, and link it to Relatio entity
-            entity_wd = SpEntity(ents[0], resources_sp)
-            entity_wd.set_re_entity(entity)
+            init_sp_instance(ents[0], entity, resources_sp)
             continue
 
-        for entity_wd in ents:
-
+        for entity_sp in ents:
             # Build partOf Relatio entity
-            re_entity = ReEntity(entity_wd, resources)
+            re_entity = ReEntity(entity_sp, resources)
             entity.add_partOf_instance(re_entity)
 
-            # Build SpaCy entity, and link it to Relatio entity
-            entity_wd = SpEntity(entity_wd, resources_sp)
-            entity_wd.set_re_entity(re_entity)
+            init_sp_instance(entity_sp, re_entity, resources_sp)
 
     return resources_sp

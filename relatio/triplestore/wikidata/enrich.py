@@ -1,6 +1,7 @@
 
 from rdflib import OWL, RDF, RDFS, URIRef
 from requests import HTTPError
+from spacy.tokens.span import Span
 from SPARQLWrapper import SPARQLWrapper, JSON
 from typing import Dict, List, Union
 
@@ -29,7 +30,7 @@ with open(path) as f:
 
 
 
-def add_eq_properties(resources: ResourceStore) -> None:
+def add_eq_wd_properties(resources: ResourceStore) -> None:
     """ Link equivalent properties """
         
     # From https://www.wikidata.org/wiki/Wikidata:Relation_between_properties_in_RDF_and_in_Wikidata
@@ -137,7 +138,7 @@ def query_wd(iri: str) -> List[Dict[str, Union[str, List[str]]]]:
 
 
 
-def build_instances(entity: WdEntity, resources: ResourceStore) -> None:
+def build_wd_instances(entity: WdEntity, resources: ResourceStore) -> None:
     """ Build instances from Wikidata results """
 
     # Iterate over each set of relation/objects returned from Wikidata
@@ -161,6 +162,20 @@ def build_instances(entity: WdEntity, resources: ResourceStore) -> None:
 
 
 
+def init_wd_instance(entity_wd: Span, 
+                     entity: ReEntity,
+                     resources_wd: ResourceStore) -> None:
+    """ Initialize Wikidata instances from query results """
+
+    # Build Wikidata entity, and link it to Relatio entity
+    entity_wd = WdEntity(entity_wd, resources_wd)
+    entity_wd.set_re_entity(entity)
+
+    # Query WikiWikidataData, and add returned triples
+    build_wd_instances(entity_wd, resources_wd)
+
+
+
 def build_wd_resources(resources: ResourceStore) -> ResourceStore:
     """ Main function """
 
@@ -168,7 +183,7 @@ def build_wd_resources(resources: ResourceStore) -> ResourceStore:
     resources_wd = ResourceStore(CLASSES_AND_PROPS_WD)
 
     # Link equivalent properties
-    add_eq_properties(resources)
+    add_eq_wd_properties(resources)
 
     # Iterate over every base entity
     entities = list(resources.values())
@@ -182,22 +197,15 @@ def build_wd_resources(resources: ResourceStore) -> ResourceStore:
             continue
 
         if ents[0].label_.lower() == entity._label.lower():
-            # Build Wikidata entity, and link it to Relatio entity
-            entity_wd = WdEntity(ents[0], resources_wd)
-            entity_wd.set_re_entity(entity)
+            init_wd_instance(ents[0], entity, resources_wd)
             continue
 
         for entity_wd in ents:
-
             # Build partOf Relatio entity
             re_entity = ReEntity(entity_wd, resources)
             entity.add_partOf_instance(re_entity)
 
-            # Build Wikidata entity, and link them to Relatio entity
-            entity_wd = WdEntity(entity_wd, resources_wd)
-            entity_wd.set_re_entity(re_entity)
+            init_wd_instance(entity_wd, re_entity, resources_wd)
 
-        # Query WikiWikidataData, and add triples
-        build_instances(entity_wd, resources_wd)
 
     return resources_wd

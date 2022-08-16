@@ -1,5 +1,6 @@
 
 from spacy.tokens.doc import Doc
+from spacy.tokens.token import Token
 from spacy_wordnet.wordnet_annotator import WordnetAnnotator
 from typing import List
 
@@ -9,7 +10,7 @@ from .models import (
     CLASSES_AND_PROPS_WN,
     WnEntity, WnRelation
 )
-from ..models import ReEntity, ReRelation
+from ..models import ReEntity, ReInstance, ReRelation
 from ..resources import ResourceStore
 
 
@@ -27,10 +28,22 @@ def remove_ents(sentence: Doc, labels: List[str] = [ 'PERSON', 'ORG' ]) -> Doc:
     return sentence
 
 
-def build_instances(class_: type,
-                    class_wn: type,
-                    resources: ResourceStore, 
-                    resources_wn: ResourceStore) -> None:
+
+def init_wn_instance(instance_wn: Token, 
+                     class_wn: type, 
+                     instance: ReInstance, 
+                     resources_wn: ResourceStore) -> None:
+    """ Initialize WordNet instances """
+
+    instance_wn = class_wn(instance_wn, resources_wn)
+    instance_wn.set_re_instance(instance)
+
+
+
+def build_wn_instances(class_: type,
+                       class_wn: type,
+                       resources: ResourceStore, 
+                       resources_wn: ResourceStore) -> None:
     """ Build instances from WordNet results """
 
     # Iterate over all resources
@@ -43,20 +56,15 @@ def build_instances(class_: type,
         label = remove_ents(label)
 
         if str(label[0]).lower() == instance._label.lower():
-            # Build WordNet entity, and link it to Relatio entity
-            instance_wn = class_wn(label[0], resources_wn)
-            instance_wn.set_re_instance(instance)
+            init_wn_instance(label[0], class_wn,instance,  resources_wn)
             continue
 
         for instance_wn in label:
-
             # Build partOf Relatio entity
             re_instance = class_(instance_wn, resources)
             instance.add_partOf_instance(re_instance)
 
-            # Build WordNet entity, and link it to Relatio entity
-            instance_wn = class_wn(instance_wn, resources_wn)
-            instance_wn.set_re_instance(re_instance)
+            init_wn_instance(instance_wn, class_wn, re_instance, resources_wn)
 
 
 
@@ -67,8 +75,8 @@ def build_wn_resources(entities: ResourceStore, relations: ResourceStore) -> Res
     resources_wn = ResourceStore(CLASSES_AND_PROPS_WN)
 
     # Build WordNet instances from entities/relations
-    build_instances(ReEntity,   WnEntity,   entities,  resources_wn)
-    build_instances(ReRelation, WnRelation, relations, resources_wn)
+    build_wn_instances(ReEntity,   WnEntity,   entities,  resources_wn)
+    build_wn_instances(ReRelation, WnRelation, relations, resources_wn)
 
     return resources_wn
 

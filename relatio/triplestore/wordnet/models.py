@@ -43,15 +43,15 @@ class WnDomain(Instance):
 class WnSynset(Instance):
     """ WordNet synonyms set """
 
-    def __init__(self, synset: Synset, class_: type, resource_store: ResourceStore):
+    def __init__(self, synset: Synset, resource_store: ResourceStore):
         super().__init__(synset.name(), WORDNET, SYNSET_WN, resource_store)
 
         # If instance not already in ResourceStore, set it
         if self.to_set:
-            # TODO: Sometimes not empty?
             self._definition = synset.definition().capitalize()
             self._lexname = synset.lexname()
             self._pos = synset.pos()
+            # TODO: Extract more info from WordNet
     #         self._lemmas = self.set_lemmas(synset, class_, resource_store)
 
 
@@ -107,7 +107,7 @@ class WnInstance(Instance):
     def set_synsets(self, synsets: list, resource_store: ResourceStore) -> List[WnSynset]:
         """ Add relation of self to a list of synsets """
         return [
-            WnSynset(synset, self.__class__, resource_store)
+            WnSynset(synset, resource_store)
             for synset in synsets
         ]
 

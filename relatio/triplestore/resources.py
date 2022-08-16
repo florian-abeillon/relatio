@@ -120,15 +120,19 @@ class ResourceStore(dict):
 
     def __init__(self, resources: List[Resource] = []):
         for resource in resources:
-            self[resource] = resource
+            self.add(resource)
 
     def __or__(self, resource_store: dict) -> dict:
         return ResourceStore({ **self, **resource_store })
 
+    def add(self, resource: Resource) -> None:
+        """ Add a resource to self """
+        self[resource] = resource
+
     def get_or_add(self, resource: Resource) -> Resource:
         """ Get a resource from self, or add it to self if necessary """
         if not resource in self:
-            self[resource] = resource
+            self.add(resource)
         return self[resource]
 
     def to_graph(self, graph: Graph) -> None:
