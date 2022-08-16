@@ -181,6 +181,12 @@ def build_wd_resources(resources: ResourceStore) -> ResourceStore:
         if not ents:
             continue
 
+        if ents[0].label_.lower() == entity._label.lower():
+            # Build Wikidata entity, and link it to Relatio entity
+            entity_wd = WdEntity(ents[0], resources_wd)
+            entity_wd.set_re_entity(entity)
+            continue
+
         for entity_wd in ents:
 
             # Build partOf Relatio entity

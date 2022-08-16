@@ -42,13 +42,19 @@ def build_instances(class_: type,
         # Remove Person/Organization entities
         label = remove_ents(label)
 
+        if str(label[0]).lower() == instance._label.lower():
+            # Build WordNet entity, and link it to Relatio entity
+            instance_wn = class_wn(label[0], resources_wn)
+            instance_wn.set_re_instance(instance)
+            continue
+
         for instance_wn in label:
 
             # Build partOf Relatio entity
             re_instance = class_(instance_wn, resources)
             instance.add_partOf_instance(re_instance)
 
-            # Build WordNet entity, and link them to Relatio entity
+            # Build WordNet entity, and link it to Relatio entity
             instance_wn = class_wn(instance_wn, resources_wn)
             instance_wn.set_re_instance(re_instance)
 
