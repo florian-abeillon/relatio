@@ -1,5 +1,8 @@
 
-from rdflib import Graph, Literal, OWL, RDF, RDFS, SKOS, URIRef
+from rdflib import (
+    OWL, RDF, RDFS,
+    Dataset, Literal, URIRef
+)
 from typing import List, Optional, Union
 
 from .namespaces import PREFIXES
@@ -7,24 +10,34 @@ from .utils import get_hash, to_camel_case, to_pascal_case
 
 
 
-class Triple(tuple):
-    """ RDF triple """
+class Quad(tuple):
+    """ RDF quad """
 
-    def __new__(cls, s, p, o):
+    def __new__(cls, s: Union[str, URIRef], 
+                     p: Union[str, URIRef], 
+                     o: Union[str, URIRef], 
+                     n: Optional[Union[str, URIRef]] = None):
+
+        def format_component(el: Union[str, URIRef]) -> Union[str, URIRef]:
+            if not isinstance(el, URIRef) and el.startswith("http://"):
+                el = URIRef(el)
+            return el
         
-        if not isinstance(s, URIRef) and s.startswith("http://"):
-            s = URIRef(s)
-        if not isinstance(p, URIRef) and p.startswith("http://"):
-            p = URIRef(p)
-        if not isinstance(o, URIRef) and o.startswith("http://"):
-            o = URIRef(o)
+        s = format_component(s)
+        p = format_component(p)
+        o = format_component(o)
+        if n is not None:
+            n = format_component(n)
             
-        triple = ( s, p, o )
-        return super().__new__(cls, triple)
+        quad = ( s, p, o, n )
+        return super().__new__(cls, quad)
     
 
-    def __init__(self, s, p, o, **kwargs):
-        label = ", ".join([ f"<{el}>" for el in ( s, p, o ) ])
+    def __init__(self, s: Union[str, URIRef], 
+                       p: Union[str, URIRef], 
+                       o: Union[str, URIRef], 
+                       n: Optional[Union[str, URIRef]] = None):
+        label = ", ".join([ f"<{el}>" for el in ( s, p, o, n ) ])
         self._label = f"( {label} )"
         
 
@@ -35,26 +48,35 @@ class Triple(tuple):
     def __hash__(self) -> str:
         return hash(self._label)
 
-    def inverse(self) -> tuple:
-        """ Returns inverse of self """
-        s, p, o = self
-        return Triple( o, p, s )
+
+    def inverse(self, namespace: Optional[URIRef] = None) -> tuple:
+        """ 
+        Returns inverse of self, in other namespace 
+        """
+        s, p, o, _ = self
+        return Quad( o, p, s, namespace )
         
-    def to_graph(self, graph: Graph) -> None:
-        """ Fill triplestore with triple """
-        graph.add(self)
+
+    def to_graph(self, ds: Dataset) -> None:
+        """ 
+        Fill triplestore with quad 
+        """
+        ds.add(self)
 
 
 
 class Resource:
     """ Base triplestore resource """
 
-    def __init__(self, label: str, namespace: str, iri: Optional[URIRef] = None):
+    def __init__(self, label:     str, 
+                       namespace: str, 
+                       iri:       Optional[URIRef] = None):
+                       
         self._label = str(label)
-        self._alt_label = f"{PREFIXES[namespace]}:{self._label}"
         self._namespace = namespace
         self.iri = iri if iri is not None else self.get_iri()
         
+
     def __repr__(self) -> str:
         return self._label
     def __str__(self) -> str:
@@ -62,39 +84,49 @@ class Resource:
     def __hash__(self) -> str:
         return hash(self.iri)
 
+
     def get_iri(self) -> URIRef:
-        """ Build unique resource identifier """
+        """ 
+        Build unique resource identifier 
+        """
         return URIRef(self._namespace + self._label)
 
-    def to_graph(self, graph: Graph) -> None:
-        """ Fill triplestore with resource's label """
-        graph.add(Triple( self.iri, SKOS.prefLabel, Literal(self._label) ))
-        graph.add(Triple( self.iri, SKOS.altLabel, Literal(self._alt_label) ))
+
+    def to_graph(self, ds: Dataset) -> None:
+        """ 
+        Fill triplestore with resource's label 
+        """
+        ds.add(Quad( self.iri, RDFS.label, Literal(self._label), self._namespace ))
 
 
 
 class Class(Resource):
-    """ Class of resources """
+    """ 
+    Class of resources 
+    """
     
-    def __init__(self, label: str, namespace: str):
-
+    def __init__(self, label:     str, 
+                       namespace: str):
+                       
         label = to_pascal_case(label)
         super().__init__(label, namespace)
 
 
-    def to_graph(self, graph: Graph) -> None:
-        super().to_graph(graph)
-        graph.add(Triple( self.iri, RDFS.subClassOf, OWL.Class ))
+    def to_graph(self, ds: Dataset) -> None:
+        super().to_graph(ds)
+        ds.add(Quad( self.iri, RDFS.subClassOf, OWL.Class, self._namespace ))
 
 
 
 class Property(Resource):
-    """ Link between resources """
+    """ 
+    Link between resources 
+    """
     
-    def __init__(self, label: str, 
+    def __init__(self, label:     str, 
                        namespace: str, 
-                       domain: Optional[Class] = None,
-                       range: Optional[Class] = None):
+                       domain:    Optional[Class] = None,
+                       range:     Optional[Class] = None):
 
         label = to_camel_case(label)
         super().__init__(label, namespace)
@@ -102,55 +134,69 @@ class Property(Resource):
         self._range = range
 
 
-    def to_graph(self, graph: Graph) -> None:
-        super().to_graph(graph)
-        graph.add(Triple( self.iri, RDFS.subPropertyOf, RDF.Property ))
+    def to_graph(self, ds: Dataset) -> None:
+        super().to_graph(ds)
+        ds.add(Quad( self.iri, RDFS.subPropertyOf, RDF.Property, self._namespace ))
 
         # If a domain/range is mentionned, add appropriate relation
         if self._domain is not None:
-            graph.add(Triple( self.iri, RDFS.domain, self._domain.iri ))
+            ds.add(Quad( self.iri, RDFS.domain, self._domain.iri, self._namespace ))
         if self._range is not None:
             range = self._range if isinstance(self._range, URIRef) else self._range.iri
-            graph.add(( self.iri, RDFS.range, range ))           
+            ds.add(Quad( self.iri, RDFS.range, range, self._namespace ))           
 
 
 
 class ResourceStore(dict):
-    """ Store of resources to be filled into triplestore """
+    """ 
+    Store of resources to be filled into triplestore 
+    """
 
     def __init__(self, resources: List[Resource] = []):
         for resource in resources:
             self.add(resource)
 
+
     def __or__(self, resource_store: dict) -> dict:
         return ResourceStore({ **self, **resource_store })
 
+
     def add(self, resource: Resource) -> None:
-        """ Add a resource to self """
+        """ 
+        Add a resource to self 
+        """
         self[resource] = resource
 
+
     def get_or_add(self, resource: Resource) -> Resource:
-        """ Get a resource from self, or add it to self if necessary """
+        """ 
+        Get a resource from self, or add it to self if necessary 
+        """
         if not resource in self:
             self.add(resource)
         return self[resource]
 
-    def to_graph(self, graph: Graph) -> None:
-        """ Fill triplestore with every resource from self """
+
+    def to_graph(self, ds: Dataset) -> None:
+        """ 
+        Fill triplestore with every resource from self 
+        """
         for resource in self.values():
-            resource.to_graph(graph)
+            resource.to_graph(ds)
 
 
 
 class Instance(Resource):
-    """ Instance of class/property """
+    """ 
+    Instance of class/property 
+    """
 
 
-    def __init__(self, label: str, 
-                       namespace: str, 
-                       type_: Union[Class, Property],
+    def __init__(self, label:          str, 
+                       namespace:      str, 
+                       type_:          Union[Class, Property],
                        resource_store: ResourceStore,
-                       iri: Optional[URIRef] = None):
+                       iri:            Optional[URIRef] = None):
 
         super().__init__(label, namespace, iri=iri)
         
@@ -165,10 +211,13 @@ class Instance(Resource):
 
 
     def get_iri(self) -> URIRef:
-        """ Build unique resource identifier """
+        """ 
+        Build unique resource identifier 
+        """
         key = get_hash(self.__class__.__name__, self._label)
         return URIRef(self._namespace + key)
 
-    def to_graph(self, graph: Graph) -> None:
-        super().to_graph(graph)
-        graph.add(Triple( self.iri, RDF.type, self._type.iri ))
+
+    def to_graph(self, ds: Dataset) -> None:
+        super().to_graph(ds)
+        ds.add(Quad( self.iri, RDF.type, self._type.iri, self._namespace ))

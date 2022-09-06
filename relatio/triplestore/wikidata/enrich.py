@@ -1,8 +1,11 @@
 
-from rdflib import OWL, RDF, RDFS, URIRef
+from rdflib import (
+    OWL, RDF, RDFS, 
+    URIRef
+)
 from requests import HTTPError
 from spacy.tokens.span import Span
-from SPARQLWrapper import SPARQLWrapper, JSON
+from SPARQLWrapper import JSON, SPARQLWrapper
 from typing import Dict, List, Union
 
 import os
@@ -16,7 +19,7 @@ from .models import (
 )
 from ..models import ReEntity
 from ..namespaces import WIKIDATA
-from ..resources import ResourceStore, Triple
+from ..resources import ResourceStore, Quad
 from ..utils import add_two_way
 
 
@@ -31,8 +34,10 @@ with open(path) as f:
 
 
 
-def clean_res(res: Dict[str, str]) -> List[Dict[str, Union[str, List[str]]]]:
-    """ Format res and remove uninformative Wikidata attributes """
+def clean_res(res: Dict[str, str]) -> List[dict]:
+    """ 
+    Format res and remove uninformative Wikidata attributes 
+    """
 
     res_clean = []
     print("res['results']['bindings']", res['results']['bindings'])
@@ -97,8 +102,10 @@ def clean_res(res: Dict[str, str]) -> List[Dict[str, Union[str, List[str]]]]:
 
 # TODO: Add timer to regulate number of requests
 # TODO: Batch queries
-def query_wd(iri: str) -> List[Dict[str, Union[str, List[str]]]]:
-    """ Query Wikidata knowledge base """
+def query_wd(iri: str) -> List[dict]:
+    """ 
+    Query Wikidata knowledge base 
+    """
 
     # Prepare query
     sparql = SPARQLWrapper(URL)
@@ -122,8 +129,11 @@ def query_wd(iri: str) -> List[Dict[str, Union[str, List[str]]]]:
 
 
 
-def build_wd_instances(entity: WdEntity, resources: ResourceStore) -> None:
-    """ Build instances from Wikidata results """
+def build_wd_instances(entity:    WdEntity, 
+                       resources: ResourceStore) -> None:
+    """ 
+    Build instances from Wikidata results 
+    """
 
     # Iterate over each set of relation/objects returned from Wikidata
     res = query_wd(entity.iri)
@@ -146,10 +156,12 @@ def build_wd_instances(entity: WdEntity, resources: ResourceStore) -> None:
 
 
 
-def init_wd_instance(entity_wd: Span, 
-                     entity: ReEntity,
+def init_wd_instance(entity_wd:    Span, 
+                     entity:       ReEntity,
                      resources_wd: ResourceStore) -> None:
-    """ Initialize Wikidata instances from query results """
+    """ 
+    Initialize Wikidata instances from query results 
+    """
 
     # Build Wikidata entity, and link it to Relatio entity
     entity_wd = WdEntity(entity_wd, resources_wd)
@@ -161,7 +173,9 @@ def init_wd_instance(entity_wd: Span,
 
 
 def add_eq_wd_properties(resources: ResourceStore) -> None:
-    """ Link equivalent properties """
+    """ 
+    Link equivalent properties 
+    """
         
     # From https://www.wikidata.org/wiki/Wikidata:Relation_between_properties_in_RDF_and_in_Wikidata
     equivalent_props = [
@@ -171,12 +185,16 @@ def add_eq_wd_properties(resources: ResourceStore) -> None:
     ]
 
     for prop1, prop2 in equivalent_props:
-        add_two_way(resources, Triple( prop1, OWL.sameAs, prop2 ))
+        quad = Quad( prop1, OWL.sameAs, prop2, WIKIDATA )
+        add_two_way(resources, quad, other_namespace=None)
 
 
 
 def build_wd_resources(resources: ResourceStore) -> ResourceStore:
-    """ Main function """
+    """ 
+    Main function 
+    """
+    print('Building WikiData resources..')
 
     # Initialize ResourceStore with Wikidata class and properties
     resources_wd = ResourceStore(CLASSES_AND_PROPS_WD)

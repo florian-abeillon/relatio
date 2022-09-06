@@ -8,21 +8,26 @@ from ..models import ReEntity
 from ..resources import ResourceStore
 
 
+# TODO: Try to load spacy only once
 nlp = spacy.load("en_core_web_sm")
 
 
 
-def init_sp_instance(entity_sp: Span, 
-                     entity: ReEntity,
+def init_sp_instance(entity_sp:    Span, 
+                     entity:       ReEntity,
                      resources_sp: ResourceStore) -> None:
-    """ Initialize SpaCy instances """
-
+    """ 
+    Initialize SpaCy instances 
+    """
     entity_sp = SpEntity(entity_sp, resources_sp)
     entity_sp.set_re_entity(entity)
 
 
 def build_sp_resources(resources: ResourceStore) -> ResourceStore:
-    """ Main function """
+    """ 
+    Main function 
+    """
+    print('Building SpaCy resources..')
 
     # Initialize ResourceStore with SpaCy class and properties
     resources_sp = ResourceStore(CLASSES_AND_PROPS_SP)

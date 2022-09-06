@@ -19,8 +19,11 @@ nlp.add_pipe("spacy_wordnet", after='tagger', config={ 'lang': nlp.lang })
 
 
 
-def remove_ents(sentence: Doc, labels: List[str] = [ 'PERSON', 'ORG' ]) -> Doc:
-    """ Remove entities with specific labels from sentence """
+def remove_ents(sentence: Doc, 
+                labels:   List[str] = [ 'PERSON', 'ORG' ]) -> Doc:
+    """ 
+    Remove entities with specific labels from sentence 
+    """
     for ent in sentence.ents:
         if ent.label_ in labels:
             start, end = ent.start_char, ent.end_char
@@ -28,23 +31,24 @@ def remove_ents(sentence: Doc, labels: List[str] = [ 'PERSON', 'ORG' ]) -> Doc:
     return sentence
 
 
-
-def init_wn_instance(instance_wn: Token, 
-                     class_wn: type, 
-                     instance: ReInstance, 
+def init_wn_instance(instance_wn:  Token, 
+                     class_wn:     type, 
+                     instance:     ReInstance, 
                      resources_wn: ResourceStore) -> None:
-    """ Initialize WordNet instances """
-
+    """ 
+    Initialize WordNet instances 
+    """
     instance_wn = class_wn(instance_wn, resources_wn)
     instance_wn.set_re_instance(instance)
 
 
-
-def build_wn_instances(class_: type,
-                       class_wn: type,
-                       resources: ResourceStore, 
+def build_wn_instances(class_:       type,
+                       class_wn:     type,
+                       resources:    ResourceStore, 
                        resources_wn: ResourceStore) -> None:
-    """ Build instances from WordNet results """
+    """ 
+    Build instances from WordNet results 
+    """
 
     # Iterate over all resources
     instances = list(resources.values())
@@ -67,9 +71,12 @@ def build_wn_instances(class_: type,
             init_wn_instance(instance_wn, class_wn, re_instance, resources_wn)
 
 
-
-def build_wn_resources(entities: ResourceStore, relations: ResourceStore) -> ResourceStore:
-    """ Main function """
+def build_wn_resources(entities:  ResourceStore, 
+                       relations: ResourceStore) -> ResourceStore:
+    """ 
+    Main function 
+    """
+    print('Building WordNet resources..')
 
     # Initialize ResourceStore with WordNet class and properties
     resources_wn = ResourceStore(CLASSES_AND_PROPS_WN)

@@ -1,13 +1,16 @@
 
-from rdflib import Graph, Literal, OWL, RDF, SKOS
+from rdflib import (
+    OWL, RDF, SKOS,
+    Dataset, Literal
+)
 from spacy.tokens.span import Span
 
 import spacy
 import warnings
 
 from ..models import ReEntity
-from ..namespaces import SPACY
-from ..resources import Class, Instance, Property, ResourceStore, Triple
+from ..namespaces import RELATIO, SPACY
+from ..resources import Class, Instance, Property, Quad, ResourceStore
 from ..utils import add_two_way
 
 
@@ -23,9 +26,13 @@ CLASSES_AND_PROPS_SP = [
 
 
 class SpClass(Instance):
-    """ SpaCy named entity class """
+    """ 
+    SpaCy named entity class 
+    """
 
-    def __init__(self, label: str, resource_store: ResourceStore):
+    def __init__(self, label:          str, 
+                       resource_store: ResourceStore):
+                       
         label = label.upper()
         super().__init__(label, SPACY, CLASS_SP, resource_store)
 
@@ -34,18 +41,21 @@ class SpClass(Instance):
             self._description = spacy.explain(label)
 
 
-    def to_graph(self, graph: Graph) -> None:
-        super().to_graph(graph)
+    def to_graph(self, ds: Dataset) -> None:
+        super().to_graph(ds)
 
         if self._description:
-            graph.add(Triple( self.iri, SKOS.definition, Literal(self._description) ))
+            ds.add(Quad( self.iri, SKOS.definition, Literal(self._description), self._namespace ))
 
 
 
 class SpEntity(Instance):
-    """ SpaCy named entity """
+    """ 
+    SpaCy named entity 
+    """
     
-    def __init__(self, ent: Span, resource_store: ResourceStore):
+    def __init__(self, ent:            Span, 
+                       resource_store: ResourceStore):
 
         label = str(ent).capitalize()
         super().__init__(label, SPACY, ENTITY_SP, resource_store)
@@ -57,21 +67,24 @@ class SpEntity(Instance):
 
 
     def set_re_entity(self, re_entity: ReEntity) -> None:
-        """ Declare Relatio instance of SpaCy instance """
+        """ 
+        Declare Relatio instance of SpaCy instance 
+        """
         self._re_entity = re_entity
 
 
-    def to_graph(self, graph: Graph) -> None:
-        super().to_graph(graph)
+    def to_graph(self, ds: Dataset) -> None:
+        super().to_graph(ds)
 
         # Add link to SpaCy named entity domain
         if self._ent_class is not None:
-            graph.add(Triple( self.iri, RDF.type, self._ent_class.iri ))
+            ds.add(Quad( self.iri, RDF.type, self._ent_class.iri, self._namespace ))
         else:
             warnings.warn(f"SpEntity {self._label} has an empty SpDomain")
 
         # Add link to Relatio entity
         if self._re_entity is not None:
-            add_two_way(graph, Triple( self.iri, OWL.sameAs, self._re_entity.iri ))
+            quad = Quad( self.iri, OWL.sameAs, self._re_entity.iri )
+            add_two_way(ds, quad, other_namespace=RELATIO)
         else:
             warnings.warn(f"SpEntity {self._label} created without any linked ReEntity")

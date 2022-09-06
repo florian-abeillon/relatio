@@ -1,11 +1,11 @@
 
 from spacy.tokens.span import Span
 from spacy.tokens.token import Token
-from rdflib import Graph, OWL
+from rdflib import OWL, Dataset
 from typing import Optional, Union
 
 from .namespaces import RELATIO, RELATIO_HD, RELATIO_LD
-from .resources import Class, Instance, Property, ResourceStore, Triple
+from .resources import Class, Instance, Property, Quad, ResourceStore
 from .utils import add_two_way
 
             
@@ -30,14 +30,16 @@ CLASSES_AND_PROPS = [
 
 
 class ReInstance(Instance):
-    """ Instance of a class/property extracted with Relatio """
+    """ 
+    Instance of a class/property extracted with Relatio 
+    """
     
-    def __init__(self, label: str, 
-                       type_: Union[Class, Property],
-                       resource_store: ResourceStore,
-                       hd: bool = False,
-                       ld: bool = False,
-                       resource_store_base: Optional[ResourceStore] = None):
+    def __init__(self, label:               str, 
+                       type_:               Union[Class, Property],
+                       resource_store:      ResourceStore,
+                       hd:                  bool                    = False,
+                       ld:                  bool                    = False,
+                       resource_store_base: Optional[ResourceStore] = None ):
 
         assert not ( hd and ld ), 'ReInstance cannot be both HD and LD'
         namespace = RELATIO_HD if hd else RELATIO_LD if ld else RELATIO
@@ -55,8 +57,11 @@ class ReInstance(Instance):
                 self.set_base_instance(label, resource_store_base)
 
 
-    def set_base_instance(self, label: str, resource_store: ResourceStore) -> None:
-        """ Declare base instance of HD/LD instance """
+    def set_base_instance(self, label:          str, 
+                                resource_store: ResourceStore) -> None:
+        """ 
+        Declare base instance of HD/LD instance 
+        """
         is_neg = label.startswith('not ')
         if is_neg:
             label = label[4:]
@@ -64,38 +69,46 @@ class ReInstance(Instance):
 
 
     def set_ld_instance(self, ld_instance: Instance) -> None:
-        """ Declare LD instance of HD instance """
+        """ 
+        Declare LD instance of HD instance 
+        """
         self._ld_instance = ld_instance
 
+
     def add_partOf_instance(self, partOf_instance: Instance) -> None:
-        """ Add partOf instance of base instance """
+        """ 
+        Add partOf instance of base instance 
+        """
         if self.iri != partOf_instance:
             self._partOf_instances.add(partOf_instance)
 
 
-    def to_graph(self, graph: Graph) -> None:
-        super().to_graph(graph)
+    def to_graph(self, ds: Dataset) -> None:
+        super().to_graph(ds)
 
         if self._base_instance is not None:
-            add_two_way(graph, Triple( self.iri, OWL.sameAs, self._base_instance.iri ))
+            quad = Quad( self.iri, OWL.sameAs, self._base_instance.iri, self._namespace )
+            add_two_way(ds, quad, other_namespace=RELATIO)
 
         if self._ld_instance is not None:
-            graph.add(Triple( self.iri, IS_HD_INSTANCE_OF.iri, self._ld_instance.iri ))
+            ds.add(Quad( self.iri, IS_HD_INSTANCE_OF.iri, self._ld_instance.iri ))
 
         for partOf_instance in self._partOf_instances:
-            graph.add(Triple( self.iri, CONTAINS.iri, partOf_instance.iri ))
+            ds.add(Quad( self.iri, CONTAINS.iri, partOf_instance.iri, self._namespace ))
             
     
 
 class ReRelation(ReInstance):
-    """ Relation between entities extracted with Relatio """
+    """ 
+    Relation between entities extracted with Relatio 
+    """
     
-    def __init__(self, label: Union[str, Span, Token], 
-                       resource_store: ResourceStore,
-                       hd: bool = False,
-                       ld: bool = False, 
-                       is_neg: bool = False,
-                       resource_store_base: Optional[ResourceStore] = None):
+    def __init__(self, label:               Union[str, Span, Token], 
+                       resource_store:      ResourceStore,
+                       hd:                  bool                    = False,
+                       ld:                  bool                    = False, 
+                       is_neg:              bool                    = False,
+                       resource_store_base: Optional[ResourceStore] = None ):
 
         label = str(label).lower()
         if is_neg:
@@ -113,34 +126,39 @@ class ReRelation(ReInstance):
                                       hd=hd, ld=ld, resource_store_base=resource_store_base)
 
         
-    def set_pos_instance(self, label: str, 
-                               resource_store: ResourceStore,
-                               hd: bool = False,
-                               ld: bool = False,
-                               resource_store_base: Optional[ResourceStore] = None) -> None:
-        """ Declare negative relation of self """
+    def set_pos_instance(self, label:               str, 
+                               resource_store:      ResourceStore,
+                               hd:                  bool                    = False,
+                               ld:                  bool                    = False,
+                               resource_store_base: Optional[ResourceStore] = None ) -> None:
+        """ 
+        Declare negative relation of self 
+        """
         self._pos_instance = ReRelation(label, resource_store, 
                                         hd=hd, ld=ld, resource_store_base=resource_store_base, is_neg=False)
 
 
-    def to_graph(self, graph: Graph) -> None:
-        super().to_graph(graph)
+    def to_graph(self, ds: Dataset) -> None:
+        super().to_graph(ds)
         
         # Add two-way link to/from negated relation 
         if self._pos_instance is not None:
-            add_two_way(graph, Triple( self.iri, OWL.inverseOf, self._pos_instance.iri ))
+            quad = Quad( self.iri, OWL.inverseOf, self._pos_instance.iri, self._namespace )
+            add_two_way(ds, quad, other_namespace=self._namespace)
     
 
     
 class ReEntity(ReInstance):
-    """ Entity, ie. a concept, extracted with Relatio """
+    """ 
+    Entity, ie. a concept, extracted with Relatio 
+    """
     
-    def __init__(self, label: Union[str, Span, Token], 
-                       resource_store: ResourceStore,
-                       hd: bool = False,
-                       ld: bool = False,
+    def __init__(self, label:               Union[str, Span, Token], 
+                       resource_store:      ResourceStore,
+                       hd:                  bool                    = False,
+                       ld:                  bool                    = False,
                        resource_store_base: Optional[ResourceStore] = None,
-                       **kwargs):
+                       **kwargs                                            ):
 
         label = str(label).capitalize()
         type_ = ENTITY_HD if hd else ENTITY_LD if ld else ENTITY
@@ -152,13 +170,16 @@ class ReEntity(ReInstance):
             self._objects = set()
 
 
-    def add_object(self, relation: ReRelation, object_: ReInstance) -> None:
-        """ Add relation of self to an object """
+    def add_object(self, relation: ReRelation, 
+                         object_: ReInstance ) -> None:
+        """ 
+        Add relation of self to an object 
+        """
         self._objects.add(( relation, object_ ))
 
 
-    def to_graph(self, graph: Graph) -> None:
-        super().to_graph(graph)
+    def to_graph(self, ds: Dataset) -> None:
+        super().to_graph(ds)
 
         for relation, object_ in self._objects:
-            graph.add(Triple( self.iri, relation.iri, object_.iri ))
+            ds.add(Quad( self.iri, relation.iri, object_.iri, self._namespace ))

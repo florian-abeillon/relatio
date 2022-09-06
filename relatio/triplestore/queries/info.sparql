@@ -1,0 +1,35 @@
+
+PREFIX : <http://hd.relat.io#>
+
+
+SELECT DISTINCT ?s_label ?p_label ?o_label
+
+
+# Select triples containing center node
+WHERE {{
+
+   {{
+      ?center a          :Entity   ;
+              rdfs:label "{label}" .
+
+      # Get all triples starting from center node
+      ?center (a|!a)?/(a|!a)?/(a|!a)? ?s .
+
+   }} UNION {{
+      ?center a          :Entity   ;
+              rdfs:label "{label}" .
+
+      # Get all triples ending to center node
+      ?s (a|!a)?/(a|!a)?/(a|!a)? ?center .
+
+   }}
+   
+   ?s ?p ?o .
+   ?s a          :Entity   ;
+      rdfs:label ?s_label  .
+   ?p a          :relation ;
+      rdfs:label ?p_label  .
+   ?o a          :Entity   ;
+      rdfs:label ?o_label  .
+           
+}}

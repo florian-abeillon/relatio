@@ -7,28 +7,34 @@ import matplotlib.pyplot as plt
 import networkx as nx
 
 from .namespaces import PREFIXES
-from .resources import Triple
+from .resources import Quad
 
 
-def prettify(iri: str) -> Triple:
-    """ Prettify IRI with prefix form of namespace """
+def prettify(iri: str) -> Quad:
+    """ 
+    Prettify IRI with prefix form of namespace 
+    """
     for namespace, prefix in PREFIXES.items():
         iri = iri.replace(str(namespace), prefix + ":")
     return iri
 
 
-def get_triples(res) -> List[Triple]:
-    """ Prettify list of triples """
+def get_triples(res) -> List[Quad]:
+    """ 
+    Prettify list of triples 
+    """
     triples = []
     for triple in res:
         triple = [ el.toPython() for el in triple ]
         triple[1] = prettify(triple[1])
-        triples.append(Triple(*triple))
+        triples.append(Quad(*triple))
     return triples
 
 
 def plot_graph(res, figsize: Tuple[int, int] = ( 10, 8 )) -> None:
-    """ Plot graph from list of triples """
+    """ 
+    Plot graph from list of quad 
+    """
 
     # Turn rdflib graph into networkx graph
     G = rdflib_to_networkx_multidigraph(res)
@@ -52,8 +58,6 @@ def plot_graph(res, figsize: Tuple[int, int] = ( 10, 8 )) -> None:
             node_color.append('green')
         elif node.startswith('wn:'):
             node_color.append('orange')
-        else:
-            raise ValueError
 
     # Format edge labels
     edge_labels = {

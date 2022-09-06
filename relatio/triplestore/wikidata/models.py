@@ -1,13 +1,16 @@
 
-from rdflib import Graph, Literal, OWL, URIRef
+from rdflib import (
+    OWL,
+    Dataset, Literal, URIRef
+)
 from spacy.tokens.span import Span
 from typing import List, Union
 
 import warnings
 
 from ..models import ReEntity
-from ..namespaces import WIKIDATA
-from ..resources import Class, Instance, Property, ResourceStore, Triple
+from ..namespaces import RELATIO, WIKIDATA
+from ..resources import Class, Instance, Property, Quad, ResourceStore
 from ..utils import add_two_way
 
 
@@ -20,30 +23,41 @@ CLASSES_AND_PROPS_WD = [ ENTITY_WD, RELATION_WD ]
 
 
 class WdInstance(Instance):
-    """ Wikidata instance of a class """
+    """ 
+    Wikidata instance of a class 
+    """
     
-    def __init__(self, label: str, 
-                       type_: Union[Class, Property],
+    def __init__(self, label:          str, 
+                       type_:          Union[Class, Property],
                        resource_store: ResourceStore,
-                       iri: str = ""):
+                       iri:            str = ""              ):
 
         super().__init__(label, WIKIDATA, type_, resource_store, iri=URIRef(iri))
 
 
 
 class WdRelation(WdInstance):
-    """ Wikidata relation """
+    """
+    Wikidata relation 
+    """
     
-    def __init__(self, label: str, resource_store: ResourceStore, iri: str):
+    def __init__(self, label:          str, 
+                       resource_store: ResourceStore, 
+                       iri:            str          ):
+
         label = label.lower()
         super().__init__(label, RELATION_WD, resource_store, iri)
 
 
 
 class WdEntity(WdInstance):
-    """ Wikidata entity """
+    """ 
+    Wikidata entity 
+    """
     
-    def __init__(self, ent: Union[str, Span], resource_store: ResourceStore, iri: str = ""):
+    def __init__(self, ent:            Union[str, Span], 
+                       resource_store: ResourceStore, 
+                       iri:            str = ""        ):
 
         label = str(ent).capitalize()
         if not iri:
@@ -58,35 +72,46 @@ class WdEntity(WdInstance):
             self._re_entity = None
 
 
-    def add_objects(self, relation: WdRelation, objects: List[WdInstance]) -> None:
-        """ Add relation of self to a list of objects """
+    def add_objects(self, relation: WdRelation, 
+                          objects:  List[WdInstance]) -> None:
+        """ 
+        Add relation of self to a list of objects 
+        """
         self._objects.update({ 
             ( relation, object_ ) for object_ in objects 
         })
 
-    def add_attributes(self, relation: WdRelation, attributes = List[str]) -> None:
-        """ Add relation of self to a list of attributes """
+
+    def add_attributes(self, relation:   WdRelation, 
+                             attributes: List[str] ) -> None:
+        """ 
+        Add relation of self to a list of attributes 
+        """
         self._attributes.update({
             ( relation, attribute ) for attribute in attributes
         })
+        
 
     def set_re_entity(self, re_entity: ReEntity) -> None:
-        """ Declare Relatio instance of Wikidata instance """
+        """ 
+        Declare Relatio instance of Wikidata instance 
+        """
         self._re_entity = re_entity
 
 
-    def to_graph(self, graph: Graph) -> None:
-        super().to_graph(graph)
+    def to_graph(self, ds: Dataset) -> None:
+        super().to_graph(ds)
         
         for relation, object_ in self._objects:
-            graph.add(Triple( self.iri, relation.iri, object_.iri ))
+            ds.add(Quad( self.iri, relation.iri, object_.iri, self._namespace ))
         for relation, attribute in self._attributes:
-            graph.add(Triple( self.iri, relation.iri, Literal(attribute) ))
+            ds.add(Quad( self.iri, relation.iri, Literal(attribute), self._namespace ))
         if not self._objects and not self._attributes:
             warnings.warn(f"WdEntity {self._label} created without any linked WdEntity nor attribute")
 
         # Add link to Relatio entity
         if self._re_entity is not None:
-            add_two_way(graph, Triple( self.iri, OWL.sameAs, self._re_entity.iri ))
+            quad = Quad( self.iri, OWL.sameAs, self._re_entity.iri )
+            add_two_way(ds, quad, other_namespace=RELATIO)
         else:
             warnings.warn(f"WdEntity {self._label} created without any linked ReEntity")
