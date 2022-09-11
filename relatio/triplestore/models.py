@@ -1,185 +1,178 @@
 
-from spacy.tokens.span import Span
-from spacy.tokens.token import Token
-from rdflib import OWL, Dataset
-from typing import Optional, Union
+from rdflib import (
+    OWL, RDF,
+    Namespace, URIRef
+)
 
-from .namespaces import RELATIO, RELATIO_HD, RELATIO_LD
-from .resources import Class, Instance, Property, Quad, ResourceStore
-from .utils import add_two_way
+from .namespaces import DEFAULT
+from .resources import (
+    Class, Resource, Property, 
+    Quad, ResourceStore
+)
+from .utils import get_hash
 
             
-# Define base class and properties
-ENTITY    = Class('Entity',  RELATIO   )
-ENTITY_HD = Class('Entity',  RELATIO_HD)
-ENTITY_LD = Class('Entity',  RELATIO_LD)
-            
-RELATION    = Property('relation', RELATIO,    domain=ENTITY,    range=ENTITY   )
-RELATION_HD = Property('relation', RELATIO_HD, domain=ENTITY_HD, range=ENTITY_HD)
-RELATION_LD = Property('relation', RELATIO_LD, domain=ENTITY_LD, range=ENTITY_LD)
+# Define default models
+ENTITY = Class('Entity')
+RELATION = Property('relation', domain=ENTITY, range=ENTITY)
+CONTAINS = Property('contains', domain=ENTITY, range=ENTITY)
 
-IS_HD_INSTANCE_OF = Property('isHDInstanceOf', RELATIO, domain=ENTITY_HD, range=ENTITY_LD)
-CONTAINS          = Property('contains',       RELATIO, domain=ENTITY,    range=ENTITY   )
-
-CLASSES_AND_PROPS = [
-    ENTITY, ENTITY_HD, ENTITY_LD,
-    RELATION, RELATION_HD, RELATION_LD,
-    IS_HD_INSTANCE_OF, CONTAINS
+MODELS = [
+    ENTITY, RELATION, CONTAINS
 ]
 
 
 
-class ReInstance(Instance):
+class Instance(Resource):
     """ 
-    Instance of a class/property extracted with Relatio 
+    Instance of class/property 
     """
-    
-    def __init__(self, label:               str, 
-                       type_:               Union[Class, Property],
-                       resource_store:      ResourceStore,
-                       hd:                  bool                    = False,
-                       ld:                  bool                    = False,
-                       resource_store_base: Optional[ResourceStore] = None ):
 
-        assert not ( hd and ld ), 'ReInstance cannot be both HD and LD'
-        namespace = RELATIO_HD if hd else RELATIO_LD if ld else RELATIO
-        super().__init__(label, namespace, type_, resource_store)
-
-        # If instance not already in ResourceStore, set it
-        if self.to_set:
-
-            self._base_instance = None
-            self._ld_instance = None
-            self._partOf_instances = set()
-
-            if hd or ld:
-                assert resource_store_base is not None, 'Please provide resource_store_base for HD/LD instances construction'
-                self.set_base_instance(label, resource_store_base)
+    _namespace = DEFAULT
+    _type = None
 
 
-    def set_base_instance(self, label:          str, 
-                                resource_store: ResourceStore) -> None:
+    def __new__(cls, label:          str,
+                     resource_store: ResourceStore):
+        
+        # Get resource from appropriate ResourceStore (if exists)
+        hash_ = hash(cls.generate_iri(label))
+        if hash_ in resource_store:
+            return resource_store[hash_]
+
+        # Otherwise, create new instance and add it to appropriate ResourceStore
+        instance = super().__new__(cls)
+        resource_store.add(instance, key=hash_)
+        return instance
+
+
+    def __init__(self, label: str,
+                       iri:   str = ""):
+
+        self._to_set = not self.__dict__
+
+        # If instance is not already set, set it
+        if self._to_set:
+            super().__init__(label, iri=iri)
+
+            self._quads.append(
+                Quad( self, RDF.type, self._type )
+            )
+
+
+    @classmethod
+    def generate_iri(cls, label:   str, 
+                          default: bool = False) -> URIRef:
         """ 
-        Declare base instance of HD/LD instance 
+        Build unique resource identifier from label
         """
-        is_neg = label.startswith('not ')
-        if is_neg:
-            label = label[4:]
-        self._base_instance =  self.__class__(label, resource_store, hd=False, ld=False, is_neg=is_neg)
+        label = cls._format_label(label)
+        key = f"{cls.__name__}/{get_hash(label)}"
+        namespace = DEFAULT if default else cls._namespace
+        return namespace[key]
 
 
-    def set_ld_instance(self, ld_instance: Instance) -> None:
-        """ 
-        Declare LD instance of HD instance 
-        """
-        self._ld_instance = ld_instance
-
-
-    def add_partOf_instance(self, partOf_instance: Instance) -> None:
+    def add_partOf(self, partOf_instance: Resource) -> None:
         """ 
         Add partOf instance of base instance 
         """
-        if self.iri != partOf_instance:
-            self._partOf_instances.add(partOf_instance)
-
-
-    def to_graph(self, ds: Dataset) -> None:
-        super().to_graph(ds)
-
-        if self._base_instance is not None:
-            quad = Quad( self.iri, OWL.sameAs, self._base_instance.iri, self._namespace )
-            add_two_way(ds, quad, other_namespace=RELATIO)
-
-        if self._ld_instance is not None:
-            ds.add(Quad( self.iri, IS_HD_INSTANCE_OF.iri, self._ld_instance.iri ))
-
-        for partOf_instance in self._partOf_instances:
-            ds.add(Quad( self.iri, CONTAINS.iri, partOf_instance.iri, self._namespace ))
+        if str(self).lower() != str(partOf_instance).lower():
+            self._quads.append(
+                Quad( self, CONTAINS, partOf_instance, namespace=partOf_instance._namespace )
+            )
             
+
     
 
-class ReRelation(ReInstance):
+class Relation(Instance):
     """ 
-    Relation between entities extracted with Relatio 
+    Relation between entities
     """
-    
-    def __init__(self, label:               Union[str, Span, Token], 
-                       resource_store:      ResourceStore,
-                       hd:                  bool                    = False,
-                       ld:                  bool                    = False, 
-                       is_neg:              bool                    = False,
-                       resource_store_base: Optional[ResourceStore] = None ):
 
-        label = str(label).lower()
+    _format_label = staticmethod(lambda label: str(label).lower())
+    _type = RELATION
+
+
+    def __new__(cls, label:          str,
+                     resource_store: ResourceStore,
+                     is_neg:         bool          = False,
+                     **kwargs                             ):
+
         if is_neg:
-            label = "not " + label
+            label = cls.get_neg(label)
+        return super().__new__(cls, label, resource_store, **kwargs)
 
-        type_ = RELATION_HD if hd else RELATION_LD if ld else RELATION
-        super().__init__(label, type_, resource_store, 
-                         hd=hd, ld=ld, resource_store_base=resource_store_base)
 
-        # If instance not already in ResourceStore, set it
-        if self.to_set:
-            self._pos_instance = None
+    def __init__(self, label:          str, 
+                       resource_store: ResourceStore,
+                       is_neg:         bool          = False,
+                       **kwargs                             ):
+
+        if is_neg:
+            label = self.get_neg(label)
+        super().__init__(label, **kwargs)
+
+        # If instance is not already set, set it
+        if self._to_set:
+
             if is_neg:
-                self.set_pos_instance(label[4:], resource_store, 
-                                      hd=hd, ld=ld, resource_store_base=resource_store_base)
+                relation_pos = Relation(label, resource_store, is_neg=False)
 
-        
-    def set_pos_instance(self, label:               str, 
-                               resource_store:      ResourceStore,
-                               hd:                  bool                    = False,
-                               ld:                  bool                    = False,
-                               resource_store_base: Optional[ResourceStore] = None ) -> None:
-        """ 
-        Declare negative relation of self 
+                self._quads.extend([
+                    Quad( self,         OWL.inverseOf, relation_pos ),
+                    Quad( relation_pos, OWL.inverseOf, self,        )
+                ])
+
+
+    @staticmethod
+    def get_neg(label: str) -> str:
         """
-        self._pos_instance = ReRelation(label, resource_store, 
-                                        hd=hd, ld=ld, resource_store_base=resource_store_base, is_neg=False)
+        Build the negation of label
+        """
+        label = label.lower()
+        if label.startswith('not '):
+            return label[4:]
+        return 'not ' + label
 
 
-    def to_graph(self, ds: Dataset) -> None:
-        super().to_graph(ds)
-        
-        # Add two-way link to/from negated relation 
-        if self._pos_instance is not None:
-            quad = Quad( self.iri, OWL.inverseOf, self._pos_instance.iri, self._namespace )
-            add_two_way(ds, quad, other_namespace=self._namespace)
+    def add_partOf(self, partOf_instance: Resource) -> None:
+        """ 
+        Add partOf relation of base relation 
+        """
+        if self.label != self.get_neg(str(partOf_instance)):
+            super().add_partOf(partOf_instance)
     
 
-    
-class ReEntity(ReInstance):
+
+class Entity(Instance):
     """ 
-    Entity, ie. a concept, extracted with Relatio 
+    Entity, ie. a concept
     """
+
+    _format_label = staticmethod(lambda label: str(label).capitalize())
+    _type = ENTITY
+
+
+    def __new__(cls, label:          str,
+                     resource_store: ResourceStore,
+                     **kwargs                     ):
+
+        return super().__new__(cls, label, resource_store, **kwargs)
+                                    
     
-    def __init__(self, label:               Union[str, Span, Token], 
-                       resource_store:      ResourceStore,
-                       hd:                  bool                    = False,
-                       ld:                  bool                    = False,
-                       resource_store_base: Optional[ResourceStore] = None,
-                       **kwargs                                            ):
+    def __init__(self, label:          str, 
+                       resource_store: ResourceStore,
+                       **kwargs                     ):
 
-        label = str(label).capitalize()
-        type_ = ENTITY_HD if hd else ENTITY_LD if ld else ENTITY
-        super().__init__(label, type_, resource_store, 
-                         hd=hd, ld=ld, resource_store_base=resource_store_base)
-
-        # If instance not already in ResourceStore, set it
-        if self.to_set:
-            self._objects = set()
+        super().__init__(label, **kwargs)
 
 
-    def add_object(self, relation: ReRelation, 
-                         object_: ReInstance ) -> None:
+    def add_object(self, relation:  Relation, 
+                         object_:   Instance,
+                         namespace: Namespace) -> None:
         """ 
         Add relation of self to an object 
         """
-        self._objects.add(( relation, object_ ))
-
-
-    def to_graph(self, ds: Dataset) -> None:
-        super().to_graph(ds)
-
-        for relation, object_ in self._objects:
-            ds.add(Quad( self.iri, relation.iri, object_.iri, self._namespace ))
+        self._quads.append(
+            Quad( self, relation, object_, namespace=namespace )
+        )

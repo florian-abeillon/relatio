@@ -1,44 +1,51 @@
 
 from rdflib import (
     OWL, RDF, RDFS,
-    Dataset, Literal, URIRef
+    Dataset, Literal, Namespace, URIRef
 )
 from typing import List, Optional, Union
 
-from .namespaces import PREFIXES
-from .utils import get_hash, to_camel_case, to_pascal_case
+from .namespaces import DEFAULT
+from .utils import (
+    to_camel_case, to_pascal_case, get_hash
+)
 
 
 
 class Quad(tuple):
-    """ RDF quad """
+    """ 
+    RDF quad 
+    """
 
-    def __new__(cls, s: Union[str, URIRef], 
-                     p: Union[str, URIRef], 
-                     o: Union[str, URIRef], 
-                     n: Optional[Union[str, URIRef]] = None):
-
-        def format_component(el: Union[str, URIRef]) -> Union[str, URIRef]:
-            if not isinstance(el, URIRef) and el.startswith("http://"):
-                el = URIRef(el)
-            return el
+    def __new__(cls, subject,
+                     predicate,
+                     object_, 
+                     namespace: Optional[Namespace] = None):
         
-        s = format_component(s)
-        p = format_component(p)
-        o = format_component(o)
-        if n is not None:
-            n = format_component(n)
-            
-        quad = ( s, p, o, n )
-        return super().__new__(cls, quad)
-    
+        def format(el, is_object: bool = False) -> URIRef:
+            if is_object and isinstance(el, str):
+                return Literal(el)
+            if not isinstance(el, URIRef):
+                return el.iri
+            return el
 
-    def __init__(self, s: Union[str, URIRef], 
-                       p: Union[str, URIRef], 
-                       o: Union[str, URIRef], 
-                       n: Optional[Union[str, URIRef]] = None):
-        label = ", ".join([ f"<{el}>" for el in ( s, p, o, n ) ])
-        self._label = f"( {label} )"
+        quad = ( 
+            format(subject),
+            format(predicate),
+            format(object_, is_object=True),
+            namespace if namespace is not None else subject._namespace
+        )
+        return super().__new__(cls, quad)
+        
+
+    def __init__(self, subject,
+                       predicate,
+                       object_, 
+                       namespace: Optional[Namespace] = None):
+
+        if namespace is None:
+            namespace = subject._namespace
+        self._label = f"( {subject}, {predicate}, {object_}, {namespace} )"
         
 
     def __repr__(self) -> str:
@@ -46,15 +53,7 @@ class Quad(tuple):
     def __str__(self) -> str:
         return self._label
     def __hash__(self) -> str:
-        return hash(self._label)
-
-
-    def inverse(self, namespace: Optional[URIRef] = None) -> tuple:
-        """ 
-        Returns inverse of self, in other namespace 
-        """
-        s, p, o, _ = self
-        return Quad( o, p, s, namespace )
+        return get_hash(self._label)
         
 
     def to_graph(self, ds: Dataset) -> None:
@@ -66,37 +65,57 @@ class Quad(tuple):
 
 
 class Resource:
-    """ Base triplestore resource """
+    """ 
+    Base triplestore resource 
+    """
 
-    def __init__(self, label:     str, 
-                       namespace: str, 
-                       iri:       Optional[URIRef] = None):
-                       
-        self._label = str(label)
-        self._namespace = namespace
-        self.iri = iri if iri is not None else self.get_iri()
+    _format_label = staticmethod(lambda label: str(label))
+    _namespace = None
+
+
+    def __init__(self, label: str,
+                       iri:   str = ""):
+        self._label = label
+        self._iri = URIRef(iri) if iri else self.generate_iri(label)
+        self._quads = [
+            Quad( self, RDFS.label, self.label )
+        ]
+
+
+    @property
+    def label(self) -> str:
+        return self.__class__._format_label(self._label)
+
+    @property
+    def iri(self) -> URIRef:
+        return self._iri
+    @iri.setter
+    def iri(self, value) -> URIRef:
+        self._iri = URIRef(value)
         
 
     def __repr__(self) -> str:
-        return self._label
+        return self.label
     def __str__(self) -> str:
-        return self._label
+        return self.label
     def __hash__(self) -> str:
-        return hash(self.iri)
+        return get_hash(self.iri)
 
 
-    def get_iri(self) -> URIRef:
+    @classmethod
+    def generate_iri(cls, label: str) -> URIRef:
         """ 
         Build unique resource identifier 
         """
-        return URIRef(self._namespace + self._label)
+        return cls._namespace[label]
 
 
     def to_graph(self, ds: Dataset) -> None:
         """ 
         Fill triplestore with resource's label 
         """
-        ds.add(Quad( self.iri, RDFS.label, Literal(self._label), self._namespace ))
+        for quad in self._quads:
+            quad.to_graph(ds)
 
 
 
@@ -104,17 +123,21 @@ class Class(Resource):
     """ 
     Class of resources 
     """
-    
-    def __init__(self, label:     str, 
-                       namespace: str):
+
+    _format_label = staticmethod(lambda label: to_pascal_case(label))
+
+
+    def __init__(self, label:       str, 
+                       namespace:   Namespace               = DEFAULT,
+                       super_class: Union[Resource, URIRef] = OWL.Class):
                        
-        label = to_pascal_case(label)
-        super().__init__(label, namespace)
+        self.__class__._namespace = namespace
+        super().__init__(label)
 
-
-    def to_graph(self, ds: Dataset) -> None:
-        super().to_graph(ds)
-        ds.add(Quad( self.iri, RDFS.subClassOf, OWL.Class, self._namespace ))
+        # If a super_class is mentionned, add appropriate relation
+        self._quads.append(
+            Quad( self, RDFS.subClassOf, super_class )
+        )
 
 
 
@@ -122,28 +145,33 @@ class Property(Resource):
     """ 
     Link between resources 
     """
-    
-    def __init__(self, label:     str, 
-                       namespace: str, 
-                       domain:    Optional[Class] = None,
-                       range:     Optional[Class] = None):
 
-        label = to_camel_case(label)
-        super().__init__(label, namespace)
-        self._domain = domain
-        self._range = range
+    _format_label = staticmethod(lambda label: to_camel_case(label))
 
 
-    def to_graph(self, ds: Dataset) -> None:
-        super().to_graph(ds)
-        ds.add(Quad( self.iri, RDFS.subPropertyOf, RDF.Property, self._namespace ))
+    def __init__(self, label:          str,    
+                       namespace:      Namespace                      = DEFAULT, 
+                       domain:         Optional[Class]                = None,
+                       range:          Optional[Union[Class, URIRef]] = None,
+                       super_property: Union[Resource, URIRef]        = RDF.Property):
 
-        # If a domain/range is mentionned, add appropriate relation
-        if self._domain is not None:
-            ds.add(Quad( self.iri, RDFS.domain, self._domain.iri, self._namespace ))
-        if self._range is not None:
-            range = self._range if isinstance(self._range, URIRef) else self._range.iri
-            ds.add(Quad( self.iri, RDFS.range, range, self._namespace ))           
+        self.__class__._namespace = namespace
+        super().__init__(label)
+
+         # If a domain/range is mentionned, add appropriate relation
+        if domain is not None:
+            self._quads.append(
+                Quad( self, RDFS.domain, domain )
+            )
+        if range is not None:
+            self._quads.append(
+                Quad( self, RDFS.range, range )
+            )
+        
+        # If a super_property is mentionned, add appropriate relation
+        self._quads.append(
+            Quad( self, RDFS.subPropertyOf, super_property )
+        )
 
 
 
@@ -157,15 +185,14 @@ class ResourceStore(dict):
             self.add(resource)
 
 
-    def __or__(self, resource_store: dict) -> dict:
-        return ResourceStore({ **self, **resource_store })
-
-
-    def add(self, resource: Resource) -> None:
+    def add(self, resource: Resource,
+                  key:      Optional[int] = None) -> None:
         """ 
         Add a resource to self 
         """
-        self[resource] = resource
+        if key is None:
+            key = resource
+        self[key] = resource
 
 
     def get_or_add(self, resource: Resource) -> Resource:
@@ -183,41 +210,3 @@ class ResourceStore(dict):
         """
         for resource in self.values():
             resource.to_graph(ds)
-
-
-
-class Instance(Resource):
-    """ 
-    Instance of class/property 
-    """
-
-
-    def __init__(self, label:          str, 
-                       namespace:      str, 
-                       type_:          Union[Class, Property],
-                       resource_store: ResourceStore,
-                       iri:            Optional[URIRef] = None):
-
-        super().__init__(label, namespace, iri=iri)
-        
-        # Get or add resource from ResourceStore
-        self.to_set = not self in resource_store
-        self = resource_store.get_or_add(self)
-
-        # If instance not already in ResourceStore, set it
-        if self.to_set:
-            self._type = type_
-            self._alt_label = f"{PREFIXES[self._namespace]}:{self._type._label}/{self._label}"
-
-
-    def get_iri(self) -> URIRef:
-        """ 
-        Build unique resource identifier 
-        """
-        key = get_hash(self.__class__.__name__, self._label)
-        return URIRef(self._namespace + key)
-
-
-    def to_graph(self, ds: Dataset) -> None:
-        super().to_graph(ds)
-        ds.add(Quad( self.iri, RDF.type, self._type.iri, self._namespace ))

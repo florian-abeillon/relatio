@@ -1,17 +1,17 @@
 
-from rdflib import Dataset
-from typing import Dict, List, Optional, Tuple, Union
+from rdflib import Dataset, Namespace
+from tqdm import tqdm
+from typing import (
+    List, Optional, Tuple, Union
+)
 
 import pandas as pd
 import re
 
-from .models import (
-    CLASSES_AND_PROPS,
-    ReEntity, ReInstance, ReRelation
-)
+from .models import MODELS, Entity, Relation
 from .namespaces import (
     PREFIXES, 
-    RELATIO, RELATIO_HD, RELATIO_LD, 
+    RELATIO_HD, RELATIO_LD, 
     SPACY, WIKIDATA, WORDNET
 )
 from .resources import ResourceStore
@@ -20,15 +20,20 @@ from .utils import format_path
 
 
 def bind_prefixes(ds:       Dataset, 
-                  spacy:    bool, 
-                  wikidata: bool, 
-                  wordnet:  bool   ) -> None:
+                  relatio:  bool    = True,
+                  spacy:    bool    = False, 
+                  wikidata: bool    = False, 
+                  wordnet:  bool    = False) -> None:
     """
     Bind prefixes to each base namespace 
     """
 
-    namespaces = [ RELATIO, RELATIO_HD, RELATIO_LD ]
+    namespaces = []
 
+    if relatio:
+        namespaces.extend([ 
+            RELATIO_HD, RELATIO_LD 
+        ])
     if spacy:
         namespaces.append(SPACY)
     if wikidata:
@@ -41,63 +46,24 @@ def bind_prefixes(ds:       Dataset,
 
 
 
-def build_instance(class_:          type,
-                   label:           str, 
-                   resource_stores: Dict[str, ResourceStore],
-                   hd:              bool = False,
-                   **kwargs                                 ) -> Optional[ReInstance]:
+def build_instance(class_:         type,
+                   label:          str, 
+                   resource_store: ResourceStore,
+                   **kwargs                     ) -> Optional[Union[Entity, Relation]]:
     """ 
     Build instance from label 
     """
-
     # Overlook NAs
     if pd.isna(label):
         return None
-
-    # Create instance in appropriate namespace
-    return class_(label, 
-                  resource_stores['hd_ld'], 
-                  hd=hd, 
-                  ld=not hd, 
-                  resource_store_base=resource_stores['base'], 
-                  **kwargs)
+    return class_(label, resource_store, **kwargs)
 
 
 
-def build_hd_ld_instances(class_:          type, 
-                          row:             pd.Series, 
-                          key:             str, 
-                          resource_stores: Dict[str, ResourceStore],
-                          **kwargs                                 ) -> Tuple[ReInstance, 
-                                                                              ReInstance]:
-    """ 
-    Build HD/LD instances from extracted concepts 
-    """
-
-    # Create instances in HD/LD namespaces
-    instance_hd = build_instance(class_, 
-                                 row[f"{key}_highdim"], 
-                                 resource_stores,
-                                 hd=True, 
-                                 **kwargs.get('hd', {}))
-
-    instance_ld = build_instance(class_, 
-                                 row[f"{key}_lowdim"], 
-                                 resource_stores, 
-                                 hd=False, 
-                                 **kwargs.get('ld', {}))
-
-    # Set isHDInstanceOf property
-    if not ( instance_hd is None or instance_ld is None ):
-        instance_hd.set_ld_instance(instance_ld)
-        
-    return instance_hd, instance_ld
-
-
-
-def add_relation(subject:  ReEntity, 
-                 relation: ReRelation, 
-                 object_:  ReEntity  ) -> None:
+def add_relation(subject:   Entity, 
+                 relation:  Relation, 
+                 object_:   Entity  ,
+                 namespace: Namespace) -> None:
     """ 
     Add relation from subject to object  
     """
@@ -110,12 +76,12 @@ def add_relation(subject:  ReEntity,
     elif object_ is None:
         object_ = subject
     
-    subject.add_object(relation, object_)
+    subject.add_object(relation, object_, namespace)
 
 
 
-def link_partOf_instances(instances: Union[List[ReEntity], 
-                                           List[ReRelation]]) -> None:
+def link_partOf_instances(instances: Union[List[Entity], 
+                                           List[Relation]]) -> None:
     """ 
     Link partOf instances to their containing instance  
     """
@@ -125,57 +91,54 @@ def link_partOf_instances(instances: Union[List[ReEntity],
 
             if (
                 # If instance_partOf is contained in instance, and
-                re.search(fr"\b{instance_partOf._label}\b", instance._label) and 
+                re.search(fr"\b{str(instance_partOf)}\b", str(instance)) and 
                 # Instance_partOf is not exactly instance, and
-                instance._label != instance_partOf._label and
+                str(instance) != str(instance_partOf) and
                 # Instance_partOf is not negated instance
-                instance._label != "not " + instance_partOf._label
+                str(instance) != Relation.get_neg(str(instance_partOf))
             ):
-                instances[key].add_partOf_instance(instance_partOf)
+                instances[key].add_partOf(instance_partOf)
 
 
 
-def build_resources(df: pd.DataFrame) -> Tuple[Dict[str, ResourceStore], 
-                                               Dict[str, ResourceStore]]:
+def build_instances(df: pd.DataFrame) -> Tuple[ResourceStore,
+                                               ResourceStore]:
     """ 
     Build list of triples from sets of entities/property 
     """
-    print('Building Relatio resources..')
 
-    entities  = { 'base': ResourceStore(), 'hd_ld': ResourceStore() }
-    relations = { 'base': ResourceStore(), 'hd_ld': ResourceStore() }
+    entities, relations = ResourceStore(), ResourceStore()
+    dims = {
+        'highdim': RELATIO_HD, 'lowdim': RELATIO_LD
+    }
 
     # Iterate over each set of entities/property
-    for _, row in df.iterrows():
+    for _, row in tqdm(df.iterrows(), total=len(df), desc="Building Relatio instances.."):
+
+        # For highdim and lowdim entities/property
+        for key, namespace in dims.items():
+
+            # Create instances
+            subject   = build_instance(Entity,   row['ARG0_' + key], entities                                  )
+            predicate = build_instance(Relation, row['B-V_'  + key], relations, is_neg=row['B-ARGM-NEG_' + key])
+            object    = build_instance(Entity,   row['ARG1_' + key], entities                                  )
         
-        # Build subject/object entities
-        subject_hd, subject_ld = build_hd_ld_instances(ReEntity, row, 'ARG0', entities)
-        object_hd,  object_ld  = build_hd_ld_instances(ReEntity, row, 'ARG1', entities)
-        
-        # Build relation property
-        kwargs = { 
-            'hd': { 'is_neg': row['B-ARGM-NEG_highdim'] }, 
-            'ld': { 'is_neg': row['B-ARGM-NEG_lowdim']  } 
-        }
-        relation_hd, relation_ld = build_hd_ld_instances(ReRelation, row, 'B-V', relations, **kwargs)
-        
-        # Add HD/LD relations to objects
-        add_relation(subject_hd, relation_hd, object_hd)
-        add_relation(subject_ld, relation_ld, object_ld)
+            # Create triple of instances in appropriate namespace
+            add_relation(subject, predicate, object, namespace)
 
     # Link partOf instances
-    link_partOf_instances(entities['base'])
-    link_partOf_instances(relations['base'])
+    link_partOf_instances(entities)
+    link_partOf_instances(relations)
 
     return entities, relations
 
 
 
-def get_ext_data(spacy:     bool, 
-                 wikidata:  bool, 
-                 wordnet:   bool, 
-                 entities:  ResourceStore, 
-                 relations: ResourceStore) -> ResourceStore:
+async def get_resources_ext(entities:  ResourceStore, 
+                       relations: ResourceStore,
+                       spacy:     bool, 
+                       wikidata:  bool, 
+                       wordnet:   bool         ) -> ResourceStore:
     """ 
     Fetch external data 
     """
@@ -184,19 +147,19 @@ def get_ext_data(spacy:     bool,
 
     # Enrich entities list with SpaCy data
     if spacy:
-        from .spacy.enrich import build_sp_resources
+        from .external.spacy import build_sp_resources
         resources_sp = build_sp_resources(entities)
         resources.update(resources_sp)
 
     # Enrich entities list with Wikidata data
     if wikidata:
-        from .wikidata.enrich import build_wd_resources
-        resources_wd = build_wd_resources(entities)
+        from .external.wikidata import build_wd_resources
+        resources_wd = await build_wd_resources(entities)
         resources.update(resources_wd)
 
     # Enrich entities and relations lists with WordNet data
     if wordnet:
-        from .wordnet.enrich import build_wn_resources
+        from .external.wordnet import build_wn_resources
         resources_wn = build_wn_resources(entities, relations)
         resources.update(resources_wn)
 
@@ -204,77 +167,49 @@ def get_ext_data(spacy:     bool,
 
 
 
-def save_triplestore(ds:   Dataset, 
-                     path: str    ) -> None:
+def save_triplestore(ds:       Dataset, 
+                     path:     str    ,
+                     filename: str    ) -> None:
     """ 
     Save triplestore into .trig file 
     """
     print("Saving triplestore..")
     path = format_path(path)
-    ds.serialize(path + 'triplestore.trig', "trig")
+    ds.serialize(path + filename + '.trig', "trig")
 
 
 
-def build_triplestore(df:       pd.DataFrame, 
-                      spacy:    bool          = False, 
-                      wikidata: bool          = False, 
-                      wordnet:  bool          = False, 
-                      path:     str           = ""   ) -> Dataset:
+async def build_triplestore(df:       pd.DataFrame, 
+                            spacy:    bool         = False, 
+                            wikidata: bool         = False, 
+                            wordnet:  bool         = False, 
+                            path:     str          = ""   ,
+                            filename: str          = 'triplestore') -> Dataset:
     """ 
     Main function 
     """
 
     # Initialize triplestore
     ds = Dataset()
-    bind_prefixes(ds, spacy, wikidata, wordnet)
+    bind_prefixes(ds, spacy=spacy, wikidata=wikidata, wordnet=wordnet)
 
     # Build resources
-    classes_and_props = ResourceStore(CLASSES_AND_PROPS)
-    entities, relations = build_resources(df)
+    classes_and_props = ResourceStore(MODELS)
+    entities, relations = build_instances(df)
 
     # Enrich triplestore with external data
-    resources_ext = get_ext_data(spacy, wikidata, wordnet, entities['base'], relations['base'])
+    resources_ext = await get_resources_ext(entities, relations, spacy, wikidata, wordnet)
 
     # Fill triplestore with resources
     resource_stores = [
-        classes_and_props,
-        entities['base'],  entities['hd_ld'],
-        relations['base'], relations['hd_ld'],
-        resources_ext
+        classes_and_props, entities,
+        relations, resources_ext
     ]
     for resource_store in resource_stores:
         resource_store.to_graph(ds)
 
     # Save triplestore
-    save_triplestore(ds, path)
+    save_triplestore(ds, path, filename)
 
     print("Done!")
-    return ds
-
-
-
-def enrich_triplestore(path:     str,
-                       df:       pd.DataFrame, 
-                       spacy:    bool = False, 
-                       wikidata: bool = False, 
-                       wordnet:  bool = False) -> Dataset:
-    """ 
-    Secondary function 
-    """
-    assert spacy or wikidata or wordnet, "Please provide one external source of information"
-
-    # Initialize triplestore
-    ds = Dataset()
-    ds.parse(path, format='trig')
-
-    # Enrich triplestore with external data
-    entities, relations = build_resources(df)
-    resources_ext = get_ext_data(spacy, wikidata, wordnet, entities['base'], relations['base'])
-
-    # Fill triplestore with resources
-    resources_ext.to_graph(ds)
-
-    # Save triplestore
-    save_triplestore(ds, path)
-
     return ds

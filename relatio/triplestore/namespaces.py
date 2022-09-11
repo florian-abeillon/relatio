@@ -1,9 +1,10 @@
 
 from rdflib import OWL, RDF, RDFS, SKOS
+from rdflib.graph import DATASET_DEFAULT_GRAPH_ID
 from rdflib.namespace import Namespace
 
 
-RELATIO    = Namespace("http://base.relat.io#")
+DEFAULT    = Namespace(DATASET_DEFAULT_GRAPH_ID + "#")
 RELATIO_HD = Namespace("http://hd.relat.io#")
 RELATIO_LD = Namespace("http://ld.relat.io#")
 SPACY      = Namespace("http://spacy.io#")
@@ -16,7 +17,6 @@ PREFIXES = {
     RDF:        'rdf',
     RDFS:       'rdfs',
     SKOS:       'skos',
-    RELATIO:    're',
     RELATIO_HD: 'rehd',
     RELATIO_LD: 'reld',
     SPACY:      'sp',

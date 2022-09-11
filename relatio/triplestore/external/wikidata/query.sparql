@@ -1,0 +1,27 @@
+
+SELECT ?p_iri 
+       ( SAMPLE(?p_label) AS ?p_label )
+       # To get list of objects/subjects, per predicate
+       ( GROUP_CONCAT( CONCAT( STR(?n_iri), "\\\\", ?n_label, "\\\\", ?is_obj ) ; SEPARATOR = "||" ) AS ?n_list )
+       
+
+WHERE {{
+  
+  # Get all triples with iri as subject/object
+  {{ <{iri}> ?p ?n_iri  . BIND( TRUE  AS ?is_obj ) }} 
+  UNION 
+  {{ ?n_iri  ?p <{iri}> . BIND( FALSE AS ?is_obj ) }}
+  
+  ?p_iri wikibase:directClaim ?p .
+
+  # Get english labels
+  SERVICE wikibase:label {{
+      bd:serviceParam wikibase:language "en" .
+      ?p_iri rdfs:label ?p_label .
+      ?n_iri rdfs:label ?n_label .
+  }}
+         
+}}
+
+
+GROUP BY ?p_iri

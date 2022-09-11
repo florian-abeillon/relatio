@@ -3,6 +3,11 @@
 ~*
 
 *.tar.gz
+*.jar
+*.jnl
+*.log
+*.trig
+
 
 # Ignore .mypy_cache directory
 *.mypy_cache

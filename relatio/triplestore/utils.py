@@ -1,33 +1,20 @@
 
-from rdflib import URIRef
-from typing import Optional
 import hashlib
 
 
 to_pascal_case = lambda text: "".join([ 
     token[0].upper() + token[1:] 
-    for token in text.replace("_", " ").split() 
+    for token in str(text).replace("_", " ").split() 
 ])
 
-to_camel_case = lambda text: text[0].lower() + to_pascal_case(text)[1:]
+to_camel_case = lambda text: str(text)[0].lower() + to_pascal_case(text)[1:]
 
 
-def get_hash(class_: str, 
-             label:  str) -> str:
+def get_hash(text: str) -> int:
     """ 
-    Generates hash of instance of class_ with label label_ 
+    Generates SHA1 hash of text
     """
-    return f"{class_}/{hashlib.sha1(label.encode('utf-8')).hexdigest()}"
-
-
-def add_two_way(graph_or_resource_store, 
-                quad:                    tuple,
-                other_namespace:         Optional[URIRef] = None) -> None:
-    """ 
-    Add triple and its inverse to graph/ResourceStore 
-    """
-    graph_or_resource_store.add(quad)
-    graph_or_resource_store.add(quad.inverse(namespace=other_namespace))
+    return int(hashlib.sha1(text.encode('utf-8')).hexdigest(), 16)
 
 
 def format_path(path: str) -> str:
