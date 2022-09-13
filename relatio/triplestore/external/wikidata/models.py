@@ -12,8 +12,8 @@ import time
 from ..models_ext import ExtEntity, ExtRelation
 from ..utils import query_triplestore
 from ...namespaces import WIKIDATA
-from ...models import ENTITY, RELATION, Quad
-from ...resources import Class, Property, ResourceStore
+from ...models import Quad
+from ...resources import Property, ResourceStore
 
 
 URL = 'https://query.wikidata.org/sparql'
@@ -23,14 +23,11 @@ with open(path) as f:
     QUERY = f.read()
 
 
-# Define Wikidata class and property
-ENTITY_WD = Class('Entity', WIKIDATA, super_class=ENTITY)
-
-RELATION_WD = Property('relation',    WIKIDATA, super_property=RELATION)
-WD_IRI      = Property('wikidataIri', WIKIDATA                         )
+# Define Wikidata models
+WD_IRI = Property('wikidataIri', WIKIDATA)
 
 MODELS = [ 
-    ENTITY_WD, RELATION_WD, WD_IRI
+    WD_IRI
 ]
 
 
@@ -117,6 +114,7 @@ class Entity(WdInstance, ExtEntity):
 
         except HTTPError as err:
             if err.getcode() == 429:
+                # TODO: Check that it works
                 # If too many requests, wait for a bit and then try again
                 print("Sleeping for", err.headers['Retry-After'], "seconds..")
                 start = time.time()

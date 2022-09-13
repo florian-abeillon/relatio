@@ -59,7 +59,7 @@ def format_res(res: Dict[str, str]) -> List[dict]:
     
 
 
-# TODO: Add timer to regulate number of requests
+# TODO: Check timer works
 def query_triplestore(url:       str, 
                       query:     str,
                       first_try: bool = True) -> List[dict]:
@@ -83,7 +83,6 @@ def query_triplestore(url:       str,
         # If twice in a row, return empty list
         print('Error:', err, 'again, stopping')
         return []
-        
         
     # Format and return result
     res = format_res(res)

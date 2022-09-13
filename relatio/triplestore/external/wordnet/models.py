@@ -5,26 +5,23 @@ from spacy.tokens.token import Token
 
 from ..models_ext import ExtEntity, ExtRelation
 from ...namespaces import WORDNET
-from ...models import ENTITY, RELATION, Instance
+from ...models import ENTITY, Instance
 from ...resources import (
     Class, Property, Quad, ResourceStore
 )
 
 
-# Define WordNet class and properties
-DOMAIN    = Class('Domain', WORDNET                    )
-SYNSET    = Class('Synset', WORDNET                    )
-ENTITY_WN = Class('Entity', WORDNET, super_class=ENTITY)
+# Define WordNet models
+DOMAIN = Class('Domain', WORDNET)
+SYNSET = Class('Synset', WORDNET)
 
-RELATION_WN = Property('relation',  WORDNET,                                   super_property=RELATION)
-HAS_DOMAIN  = Property('hasDomain', WORDNET, domain=ENTITY, range=DOMAIN                              )
-HAS_SYNSET  = Property('hasSynset', WORDNET, domain=ENTITY, range=SYNSET                              )
-LEXNAME     = Property('lexname',   WORDNET, domain=ENTITY, range=RDFS.Literal                        )
-POS         = Property('pos',       WORDNET, domain=ENTITY, range=RDFS.Literal                        )
+HAS_DOMAIN = Property('hasDomain', WORDNET, domain=ENTITY, range=DOMAIN      )
+HAS_SYNSET = Property('hasSynset', WORDNET, domain=ENTITY, range=SYNSET      )
+LEXNAME    = Property('lexname',   WORDNET, domain=ENTITY, range=RDFS.Literal)
+POS        = Property('pos',       WORDNET, domain=ENTITY, range=RDFS.Literal)
 
 MODELS = [
     DOMAIN, SYNSET,
-    ENTITY_WN, RELATION_WN,
     HAS_DOMAIN, HAS_SYNSET,
     LEXNAME, POS
 ]
@@ -169,8 +166,7 @@ class Entity(WnInstance, ExtEntity):
     """ 
     Entity from WordNet
     """
-
-    _type = ENTITY_WN
+    pass
 
 
 
@@ -178,5 +174,4 @@ class Relation(WnInstance, ExtRelation):
     """ 
     Relation from WordNet
     """
-
-    _type = RELATION_WN
+    pass

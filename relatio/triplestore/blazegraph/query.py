@@ -6,7 +6,7 @@ from typing import List, Union
 from .server import URL_BLAZEGRAPH
 
 
-def query_blazegraph(query: str) -> Union[List[dict], Graph]:
+def query_bg(query: str) -> Union[List[dict], Graph]:
     """ 
     Query Blazegraph server
     """

@@ -5,7 +5,7 @@ from spacy.tokens.span import Span
 import spacy
 
 from ..models_ext import ExtEntity
-from ...models import ENTITY, Instance
+from ...models import Instance
 from ...namespaces import SPACY
 from ...resources import (
     Class, Quad, ResourceStore
@@ -13,11 +13,10 @@ from ...resources import (
 
 
 # Define SpaCy models
-TYPE      = Class('Type',   namespace=SPACY                    )
-ENTITY_SP = Class('Entity', namespace=SPACY, super_class=ENTITY)
+TYPE = Class('Type', namespace=SPACY)
 
 MODELS = [
-    TYPE, ENTITY_SP
+    TYPE
 ]
 
 
@@ -51,7 +50,6 @@ class Entity(ExtEntity):
     """
 
     _namespace = SPACY
-    _type = ENTITY_SP
     
 
     def __new__(cls, ent:               Span, 

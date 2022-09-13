@@ -34,6 +34,7 @@ def add_eq_wd_properties(resource_store: ResourceStore) -> None:
         resource_store.add(Quad( prop2, OWL.sameAs, prop1, WIKIDATA ))
 
 
+# TODO: Turn into multithreading?
 async def enrich_entities(entity_wd_set:     set, 
                           resource_store:    ResourceStore, 
                           resource_store_wd: ResourceStore) -> None:

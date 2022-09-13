@@ -1,5 +1,15 @@
 
+from rdflib import Dataset
+
 import hashlib
+import os
+
+from .namespaces import (
+    PREFIXES, 
+    RELATIO_HD, RELATIO_LD, 
+    SPACY, WIKIDATA, WORDNET
+)
+
 
 
 to_pascal_case = lambda text: "".join([ 
@@ -17,8 +27,65 @@ def get_hash(text: str) -> int:
     return int(hashlib.sha1(text.encode('utf-8')).hexdigest(), 16)
 
 
-def format_path(path: str) -> str:
-    """ Format path to end with slash """
-    if path and path[-1] != "/":
-        path += "/"
-    return path
+def bind_prefixes(ds:       Dataset, 
+                  relatio:  bool    = False,
+                  spacy:    bool    = False, 
+                  wikidata: bool    = False, 
+                  wordnet:  bool    = False) -> None:
+    """
+    Bind prefixes to each base namespace 
+    """
+    assert relatio or spacy or wikidata or wordnet, "No namespace passed"
+
+    namespaces = []
+
+    if relatio:
+        namespaces.extend([ 
+            RELATIO_HD, RELATIO_LD 
+        ])
+    if spacy:
+        namespaces.append(SPACY)
+    if wikidata:
+        namespaces.append(WIKIDATA)
+    if wordnet:
+        namespaces.append(WORDNET)
+
+    for namespace in namespaces:
+        ds.bind(PREFIXES[namespace], namespace)
+
+
+def get_format(filename: str) -> str:
+    """
+    Get file format from its extension
+    """
+    EXTENSIONS = {
+        'ttl': 'turtle',
+        'nt': 'ntriples',
+        'nq': 'nquads'
+    }
+    format_ = filename.split('.')[-1]
+    format_ = EXTENSIONS.get(format_, format_)
+    return format_
+
+
+def save_triplestore(ds:       Dataset, 
+                     path:     str    , 
+                     filename: str    ) -> None:
+    """ 
+    Save triplestore into file 
+    """
+    print(f"Saving triplestore from {filename}..")
+    format_ = get_format(filename)
+    ds.serialize(os.path.join(path, filename), format_)
+
+
+def load_triplestore(path:     str, 
+                     filename: str) -> Dataset:
+    """ 
+    Load triplestore from file 
+    """
+    print(f"Loading triplestore from {filename}..")
+    ds = Dataset()
+    format_ = get_format(filename)
+    ds.parse(os.path.join(path, filename), format_)
+    return ds

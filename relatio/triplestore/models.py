@@ -14,11 +14,13 @@ from .utils import get_hash
             
 # Define default models
 ENTITY = Class('Entity')
-RELATION = Property('relation', domain=ENTITY, range=ENTITY)
-CONTAINS = Property('contains', domain=ENTITY, range=ENTITY)
+RELATION   = Property('relation',  domain=ENTITY, range=ENTITY)
+CONTAINS   = Property('contains',  domain=ENTITY, range=ENTITY)
+HAS_LOWDIM = Property('hasLowDim', domain=ENTITY, range=ENTITY)
 
 MODELS = [
-    ENTITY, RELATION, CONTAINS
+    ENTITY, RELATION, 
+    CONTAINS, HAS_LOWDIM
 ]
 
 
@@ -74,12 +76,21 @@ class Instance(Resource):
 
     def add_partOf(self, partOf_instance: Resource) -> None:
         """ 
-        Add partOf instance of base instance 
+        Add partOf instance of self
         """
         if str(self).lower() != str(partOf_instance).lower():
             self._quads.append(
                 Quad( self, CONTAINS, partOf_instance, namespace=partOf_instance._namespace )
             )
+
+
+    def set_lowDim(self, lowDim_instance: Resource) -> None:
+        """ 
+        Set lowDim instance of self
+        """
+        self._quads.append(
+            Quad( self, HAS_LOWDIM, lowDim_instance )
+        )
             
 
     
@@ -109,6 +120,7 @@ class Relation(Instance):
                        **kwargs                             ):
 
         if is_neg:
+            label_pos = label
             label = self.get_neg(label)
         super().__init__(label, **kwargs)
 
@@ -116,7 +128,7 @@ class Relation(Instance):
         if self._to_set:
 
             if is_neg:
-                relation_pos = Relation(label, resource_store, is_neg=False)
+                relation_pos = Relation(label_pos, resource_store, is_neg=False)
 
                 self._quads.extend([
                     Quad( self,         OWL.inverseOf, relation_pos ),

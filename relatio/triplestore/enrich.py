@@ -2,13 +2,11 @@
 from rdflib import RDF, RDFS, Dataset, Graph
 from typing import Tuple
 
-from .build import (
-    bind_prefixes, get_resources_ext, save_triplestore
-)
+from .build import bind_prefixes
 from .models import Entity, Relation
 from .namespaces import DEFAULT
 from .resources import ResourceStore
-from .utils import format_path
+from .utils import load_triplestore, save_triplestore
 
 
 
@@ -27,7 +25,6 @@ def fetch_instances(graph:  Graph,
     return instances
 
 
-
 def get_instances(ds: Dataset) -> Tuple[ResourceStore,
                                         ResourceStore]:
     """
@@ -39,25 +36,43 @@ def get_instances(ds: Dataset) -> Tuple[ResourceStore,
     return entities, relations
 
 
-
-def load_triplestore(path:     str,
-                     filename: str) -> Dataset:
+async def get_resources_ext(entities:  ResourceStore, 
+                       relations: ResourceStore,
+                       spacy:     bool, 
+                       wikidata:  bool, 
+                       wordnet:   bool         ) -> ResourceStore:
     """ 
-    Save triplestore into .trig file 
+    Fetch external data 
     """
-    print("> Loading triplestore..")
-    ds = Dataset()
-    path = format_path(path)
-    ds.parse(path + filename + '.trig', format='trig')
-    return ds
 
+    resources = ResourceStore()
+
+    # Enrich entities list with SpaCy data
+    if spacy:
+        from .external.spacy import build_sp_resources
+        resources_sp = build_sp_resources(entities)
+        resources.update(resources_sp)
+
+    # Enrich entities list with Wikidata data
+    if wikidata:
+        from .external.wikidata import build_wd_resources
+        resources_wd = await build_wd_resources(entities)
+        resources.update(resources_wd)
+
+    # Enrich entities and relations lists with WordNet data
+    if wordnet:
+        from .external.wordnet import build_wn_resources
+        resources_wn = build_wn_resources(entities, relations)
+        resources.update(resources_wn)
+
+    return resources
 
 
 async def enrich_triplestore(spacy:    bool = False, 
                              wikidata: bool = False, 
                              wordnet:  bool = False,
-                             path:     str  = "",
-                             filename: str  = 'triplestore') -> Dataset:
+                             path:     str  = "./",
+                             filename: str  = 'triplestore.nq') -> Dataset:
     """ 
     Secondary function 
     """

@@ -17,8 +17,9 @@ PREFIXES = {
     RDF:        'rdf',
     RDFS:       'rdfs',
     SKOS:       'skos',
-    RELATIO_HD: 'rehd',
-    RELATIO_LD: 'reld',
+    DEFAULT:    '',
+    RELATIO_HD: 'hd',
+    RELATIO_LD: 'ld',
     SPACY:      'sp',
     WIKIDATA:   'wd',
     WORDNET:    'wn'

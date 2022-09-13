@@ -3,10 +3,18 @@
 ~*
 
 *.tar.gz
+
+# Blazegraph files
 *.jar
 *.jnl
 *.log
+
+# Triplestore files
+*.ttl
+*.n3
 *.trig
+*.nt
+*.nq
 
 
 # Ignore .mypy_cache directory

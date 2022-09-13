@@ -1,6 +1,6 @@
 
 from rdflib import (
-    OWL, RDF, RDFS,
+    RDFS,
     Dataset, Literal, Namespace, URIRef
 )
 from typing import List, Optional, Union
@@ -127,17 +127,11 @@ class Class(Resource):
     _format_label = staticmethod(lambda label: to_pascal_case(label))
 
 
-    def __init__(self, label:       str, 
-                       namespace:   Namespace               = DEFAULT,
-                       super_class: Union[Resource, URIRef] = OWL.Class):
+    def __init__(self, label:     str, 
+                       namespace: Namespace = DEFAULT):
                        
         self.__class__._namespace = namespace
         super().__init__(label)
-
-        # If a super_class is mentionned, add appropriate relation
-        self._quads.append(
-            Quad( self, RDFS.subClassOf, super_class )
-        )
 
 
 
@@ -149,11 +143,10 @@ class Property(Resource):
     _format_label = staticmethod(lambda label: to_camel_case(label))
 
 
-    def __init__(self, label:          str,    
-                       namespace:      Namespace                      = DEFAULT, 
-                       domain:         Optional[Class]                = None,
-                       range:          Optional[Union[Class, URIRef]] = None,
-                       super_property: Union[Resource, URIRef]        = RDF.Property):
+    def __init__(self, label:     str,    
+                       namespace: Namespace                      = DEFAULT, 
+                       domain:    Optional[Class]                = None,
+                       range:     Optional[Union[Class, URIRef]] = None   ):
 
         self.__class__._namespace = namespace
         super().__init__(label)
@@ -167,11 +160,6 @@ class Property(Resource):
             self._quads.append(
                 Quad( self, RDFS.range, range )
             )
-        
-        # If a super_property is mentionned, add appropriate relation
-        self._quads.append(
-            Quad( self, RDFS.subPropertyOf, super_property )
-        )
 
 
 
