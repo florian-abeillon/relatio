@@ -1,34 +1,10 @@
 
 from rdflib import URIRef
 from rdflib.extras.external_graph_libs import rdflib_to_networkx_multidigraph
-from typing import List, Tuple
+from typing import Tuple
 
 import matplotlib.pyplot as plt
 import networkx as nx
-
-from .namespaces import PREFIXES
-from .resources import Quad
-
-
-def prettify(iri: str) -> Quad:
-    """ 
-    Prettify IRI with prefix form of namespace 
-    """
-    for namespace, prefix in PREFIXES.items():
-        iri = iri.replace(str(namespace), prefix + ":")
-    return iri
-
-
-def get_triples(res) -> List[Quad]:
-    """ 
-    Prettify list of triples 
-    """
-    triples = []
-    for triple in res:
-        triple = [ el.toPython() for el in triple ]
-        triple[1] = prettify(triple[1])
-        triples.append(Quad(*triple))
-    return triples
 
 
 def plot_graph(res, figsize: Tuple[int, int] = ( 10, 8 )) -> None:

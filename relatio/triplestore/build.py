@@ -1,90 +1,94 @@
 
 from functools import partial
 from concurrent.futures import ProcessPoolExecutor
-from rdflib import Dataset, Namespace
+from rdflib import Dataset
 from tqdm import tqdm
 from typing import List, Optional, Tuple, Union
 
 import pandas as pd
 import re
 
-from .models import MODELS, Entity, Relation
-from .namespaces import RELATIO_HD, RELATIO_LD
+from .models import RESOURCES, Entity, Relation
+from .namespaces import DEFAULT
 from .resources import ResourceStore
 from .utils import bind_prefixes, save_triplestore
 
+# To remove unnecessary warnings
+pd.options.mode.chained_assignment = None
 
 
-def build_instance(class_:         type,
-                   label:          str, 
-                   resource_store: ResourceStore,
-                   **kwargs                     ) -> Optional[Union[Entity, Relation]]:
-    """ 
-    Build instance from label 
+
+
+def clean_df(df: pd.DataFrame) -> pd.DataFrame:
     """
-    # Overlook NAs
-    if pd.isna(label):
-        return None
-    return class_(label, resource_store, **kwargs)
+    Clean dataframe from NAs (among other stuff)
+    """
+
+    # Put N/As when predicate is undefined (even if it is in negative form)
+    df.loc[df['B-V_highdim'].isna(), 'B-V_highdim_with_neg'] = None
+    df.loc[df['B-V_lowdim'].isna(),  'B-V_lowdim_with_neg']  = None
+
+    # Filter out useless columns
+    cols = [ 'ARG0_{}', 'B-V_{}_with_neg', 'ARG1_{}']
+    cols = [ col.format('highdim') for col in cols ] + [ col.format('lowdim')  for col in cols ]
+    df = df[cols]
+
+    # Add other level to columns index for better convenience
+    new_cols = [ 'subject', 'predicate', 'object' ]
+    new_cols = [ ( 'hd', new_col ) for new_col in new_cols ] + [ ( 'ld', new_col ) for new_col in new_cols ]
+    df.columns = pd.MultiIndex.from_tuples(new_cols)
+
+    # Format predicates
+    df['hd', 'predicate'] = df['hd', 'predicate'].str.replace('_', ' ')
+    df['ld', 'predicate'] = df['ld', 'predicate'].str.replace('_', ' ')
+
+    return df
+
 
 
 def build_hd_ld_instances(class_:         type,
                           row:            pd.Series,
                           key:            str, 
-                          resource_store: ResourceStore,
-                          **kwargs                     ) -> Tuple[Optional[Union[Entity, Relation]],
-                                                                  Optional[Union[Entity, Relation]]]:
+                          resource_store: ResourceStore) -> Optional[Union[Entity, Relation]]:
     """ 
     Build HD and LD instances from row 
     """
 
-    # Prepare kwargs
-    kwargs_hd, kwargs_ld = {}, {}
-    if 'is_neg_key' in kwargs:
-        kwargs_hd['is_neg'] = row[kwargs['is_neg_key'] + 'highdim']
-        kwargs_ld['is_neg'] = row[kwargs['is_neg_key'] + 'lowdim']
-
     # Build instances
-    instance_hd = build_instance(class_, row[key + 'highdim'], resource_store, **kwargs_hd)
-    instance_ld = build_instance(class_, row[key + 'lowdim'],  resource_store, **kwargs_ld)
+    instance_hd, instance_ld = None, None
+    if not row['hd'].isna().any():
+        instance_hd = class_(row['hd'][key], resource_store=resource_store)
+    if not row['ld'].isna().any():
+        instance_ld = class_(row['ld'][key], resource_store=resource_store)
 
     # Link HD and LD instances (if neither is None)
-    if not (instance_hd is None or instance_ld is None):
+    if instance_hd is not None and instance_ld is not None:
         instance_hd.set_lowDim(instance_ld)
 
-    return instance_hd, instance_ld
+    return instance_hd
+
 
 
 def add_relation(subject:   Entity, 
                  relation:  Relation, 
-                 object_:   Entity  ,
-                 namespace: Namespace) -> None:
+                 object_:   Entity  ) -> None:
     """ 
     Add relation from subject to object  
     """
-
-    if relation is None or ( subject is None and object_ is None ):
+    if subject is None or relation is None or object_ is None:
         return
+    subject.add_object(relation, object_, DEFAULT)
 
-    if subject is None:
-        subject = object_
-    elif object_ is None:
-        object_ = subject
-    
-    subject.add_object(relation, object_, namespace)
 
 
 def link_partOf(i:              int,
-                key_label_list: List[Tuple[str, str]],
-                is_relations:   bool                  = False) -> List[Tuple[str, 
-                                                                           Union[Entity, Relation]]]:
+                key_label_list: List[Tuple[str, str]]) -> List[Tuple[str, 
+                                                                     Union[Entity, Relation]]]:
     """
-    Function to be used in multiprocessing link_partOf_instances()
+    Function to be used in multiprocessing link_partOf_entities()
     """
     
     key, label = key_label_list[i]
-    if is_relations:
-        label_neg = Relation.get_neg(label)
 
     partOf_list = [
         key_partOf for key_partOf, label_partOf in key_label_list
@@ -93,8 +97,6 @@ def link_partOf(i:              int,
             label_partOf in label and 
             # Instance_partOf is not exactly instance, and
             len(label_partOf) < len(label) and
-            # Instance_partOf is not negated instance, and
-            ( not is_relations or label_neg != label_partOf ) and
             # If instance_partOf is *really* contained in instance
             re.search(fr"\b{label_partOf}\b", label) 
         )
@@ -103,61 +105,55 @@ def link_partOf(i:              int,
     return key, partOf_list
     
 
-def link_partOf_instances(instances:    ResourceStore,
-                          is_relations: bool          = False) -> None:
+
+def link_partOf_entities(entities: ResourceStore) -> None:
     """ 
-    Link partOf instances to their containing instance  
+    Link partOf entities to their containing entities  
     """
 
     # Use multiprocessing to speed up the process
     with ProcessPoolExecutor() as executor:
         
-        # ResourceStore cannot be passed to multiprocess (pickle calls __init__ of instances)
+        # ResourceStore cannot be passed to multiprocess (pickle calls __init__ of entities)
         key_label_list = [ 
-            ( key, str(instance) ) for key, instance in instances.items() 
+            ( key, str(entity) ) for key, entity in entities.items() 
         ]
-        partOf_list = list(tqdm(executor.map(partial(link_partOf,
-                                                     key_label_list=key_label_list,
-                                                     is_relations=is_relations),
-                                             range(len(instances))), 
-                                total=len(instances), 
-                                desc=f"Linking partOf {'Relations' if is_relations else 'Entities'}.."))
+        partOf_list = list(tqdm(executor.map(partial(link_partOf, key_label_list=key_label_list),
+                                             range(len(entities))), 
+                                total=len(entities), 
+                                desc=f"Linking partOf Entities.."))
 
     # Link objects
     for key, key_partOf_list in partOf_list:
         for key_partOf in key_partOf_list:
-            instances[key].add_partOf(instances[key_partOf])
+            entities[key].add_partOf(entities[key_partOf])
 
 
-# TODO: To put in other file?
-# def link_partOf_instances(instances:    ResourceStore,
-#                           is_relations: bool          = False) -> None:
+
+# def link_partOf_entities(entities: ResourceStore) -> None:
 #     """ 
-#     Link partOf instances to their containing instance  
+#     Link partOf entities to their containing entity  
 #     """
 
-#     for key, instance in tqdm(instances.items(), 
-#                     total=len(instances), 
-#                     desc=f"Linking partOf {'Relations' if is_relations else 'Entities'}.."):
+#     for key, entity in tqdm(entities.items(), 
+#                               total=len(entities), 
+#                               desc=f"Linking partOf Entities.."):
 
-#         label = str(instance)
-#         if is_relations:
-#             label_neg = Relation.get_neg(label)
+#         label = str(entity)
 
-#         for instance_partOf in instances.values():
-#             label_partOf = str(instance_partOf)
+#         for entity_partOf in entities.values():
+#             label_partOf = str(entity_partOf)
 
 #             if (
-#                 # If instance_partOf is contained in instance, and
+#                 # If entity_partOf is contained in entity, and
 #                 label_partOf in label and 
-#                 # Instance_partOf is not exactly instance, and
+#                 # entity_partOf is not exactly entity, and
 #                 len(label_partOf) < len(label) and
-#                 # Instance_partOf is not negated instance, and
-#                 ( not is_relations or label_neg != label_partOf ) and
-#                 # If instance_partOf is *really* contained in instance
+#                 # If entity_partOf is *really* contained in entity
 #                 re.search(fr"\b{label_partOf}\b", label) 
 #             ):
-#                 instances[key].add_partOf(instance_partOf)
+#                 entities[key].add_partOf(entity_partOf)
+
 
 
 def build_instances(df: pd.DataFrame) -> Tuple[ResourceStore,
@@ -167,26 +163,25 @@ def build_instances(df: pd.DataFrame) -> Tuple[ResourceStore,
     """
 
     entities, relations = ResourceStore(), ResourceStore()
-
+    
     # Iterate over each set of entities/property
     for _, row in tqdm(df.iterrows(), 
                        total=len(df), 
                        desc="Building Relatio instances.."):
 
         # Create highdim and lowdim entities/property
-        subject_hd,   subject_ld   = build_hd_ld_instances(Entity,   row, 'ARG0_', entities                           )
-        predicate_hd, predicate_ld = build_hd_ld_instances(Relation, row, 'B-V_',  relations, is_neg_key='B-ARGM-NEG_')
-        object_hd,    object_ld    = build_hd_ld_instances(Entity,   row, 'ARG1_', entities                           )
+        subject_hd   = build_hd_ld_instances(Entity,   row, 'subject',   entities)
+        predicate_hd = build_hd_ld_instances(Relation, row, 'predicate', relations)
+        object_hd    = build_hd_ld_instances(Entity,   row, 'object',    entities)
     
-        # Create triple of instances in appropriate namespace
-        add_relation(subject_hd, predicate_hd, object_hd, RELATIO_HD)
-        add_relation(subject_ld, predicate_ld, object_ld, RELATIO_LD)
+        # Create triple of instances
+        add_relation(subject_hd, predicate_hd, object_hd)
 
     # Link partOf instances
-    link_partOf_instances(entities)
-    link_partOf_instances(relations, is_relations=True)     # Rather link neg?
+    link_partOf_entities(entities)
 
     return entities, relations
+
 
 
 async def build_triplestore(df:       pd.DataFrame,
@@ -198,10 +193,13 @@ async def build_triplestore(df:       pd.DataFrame,
 
     # Initialize triplestore
     ds = Dataset()
-    bind_prefixes(ds, relatio=True)
+    bind_prefixes(ds)
+
+    # Clean dataset
+    df = clean_df(df)
 
     # Build resources
-    classes_and_props = ResourceStore(MODELS)
+    classes_and_props = ResourceStore(RESOURCES)
     entities, relations = build_instances(df)
     
     # Fill triplestore with resources

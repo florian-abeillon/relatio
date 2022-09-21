@@ -7,7 +7,8 @@ from ..models_ext import ExtEntity, ExtRelation
 from ...namespaces import WORDNET
 from ...models import ENTITY, Instance
 from ...resources import (
-    Class, Property, Quad, ResourceStore
+    Class, PropertyInstance,
+    Quad, ResourceStore
 )
 
 
@@ -15,10 +16,10 @@ from ...resources import (
 DOMAIN = Class('Domain', WORDNET)
 SYNSET = Class('Synset', WORDNET)
 
-HAS_DOMAIN = Property('hasDomain', WORDNET, domain=ENTITY, range=DOMAIN      )
-HAS_SYNSET = Property('hasSynset', WORDNET, domain=ENTITY, range=SYNSET      )
-LEXNAME    = Property('lexname',   WORDNET, domain=ENTITY, range=RDFS.Literal)
-POS        = Property('pos',       WORDNET, domain=ENTITY, range=RDFS.Literal)
+HAS_DOMAIN = PropertyInstance('hasDomain', WORDNET, domain=ENTITY, range=DOMAIN      )
+HAS_SYNSET = PropertyInstance('hasSynset', WORDNET, domain=ENTITY, range=SYNSET      )
+LEXNAME    = PropertyInstance('lexname',   WORDNET, domain=ENTITY, range=RDFS.Literal)
+POS        = PropertyInstance('pos',       WORDNET, domain=ENTITY, range=RDFS.Literal)
 
 MODELS = [
     DOMAIN, SYNSET,

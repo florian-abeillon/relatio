@@ -25,6 +25,7 @@ def fetch_instances(graph:  Graph,
     return instances
 
 
+
 def get_instances(ds: Dataset) -> Tuple[ResourceStore,
                                         ResourceStore]:
     """
@@ -34,6 +35,7 @@ def get_instances(ds: Dataset) -> Tuple[ResourceStore,
     entities  = fetch_instances(graph, Entity)
     relations = fetch_instances(graph, Relation)
     return entities, relations
+
 
 
 async def get_resources_ext(entities:  ResourceStore, 
@@ -68,6 +70,7 @@ async def get_resources_ext(entities:  ResourceStore,
     return resources
 
 
+
 async def enrich_triplestore(spacy:    bool = False, 
                              wikidata: bool = False, 
                              wordnet:  bool = False,
@@ -80,7 +83,7 @@ async def enrich_triplestore(spacy:    bool = False,
 
     # Initialize triplestore
     ds = load_triplestore(path, filename)
-    bind_prefixes(ds, spacy=spacy, wikidata=wikidata, wordnet=wordnet, relatio=False)
+    bind_prefixes(ds, spacy=spacy, wikidata=wikidata, wordnet=wordnet)
 
     # Enrich triplestore with external data
     entities, relations = get_instances(ds)
@@ -90,6 +93,7 @@ async def enrich_triplestore(spacy:    bool = False,
     resources_ext.to_graph(ds)
 
     # Save triplestore
+    filename = "triplestore_enriched.trig"
     save_triplestore(ds, path, filename)
 
     return ds

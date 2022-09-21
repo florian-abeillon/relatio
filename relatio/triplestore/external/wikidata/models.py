@@ -13,7 +13,7 @@ from ..models_ext import ExtEntity, ExtRelation
 from ..utils import query_triplestore
 from ...namespaces import WIKIDATA
 from ...models import Quad
-from ...resources import Property, ResourceStore
+from ...resources import PropertyInstance, ResourceStore
 
 
 URL = 'https://query.wikidata.org/sparql'
@@ -24,7 +24,7 @@ with open(path) as f:
 
 
 # Define Wikidata models
-WD_IRI = Property('wikidataIri', WIKIDATA)
+WD_IRI = PropertyInstance('wikidataIri', WIKIDATA)
 
 MODELS = [ 
     WD_IRI
@@ -82,18 +82,13 @@ class Relation(WdInstance, ExtRelation):
     """ 
     Wikidata relation 
     """
-
-    _type = RELATION_WD
-                  
+    pass  
 
 
 class Entity(WdInstance, ExtEntity):
     """ 
     Wikidata entity 
     """
-
-    _type = ENTITY_WD
-
 
     def query_triplestore(self) -> List[dict]:
         """

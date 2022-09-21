@@ -6,6 +6,7 @@ from typing import Dict, List
 import spacy
 
 
+# TODO: Only keep NER?
 nlp = spacy.load("en_core_web_sm")
 
             

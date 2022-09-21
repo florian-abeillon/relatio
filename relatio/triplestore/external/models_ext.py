@@ -3,6 +3,7 @@ from copy import deepcopy
 from typing import Optional
 
 from ..models import Entity, Instance, Relation
+from ..namespaces import DEFAULT
 from ..resources import ResourceStore
 
 
@@ -17,7 +18,7 @@ class ExtInstance(Instance):
                      resource_store_ext: Optional[ResourceStore] = None):
 
         # Get hash in default namespace
-        hash_default = hash(super().generate_iri(label, default=True))
+        hash_default = hash(super().generate_iri(label, namespace=DEFAULT))
 
         # If resource is already in resource_store, return it
         if hash_default in resource_store:
