@@ -1,9 +1,10 @@
 
 from rdflib import RDF, RDFS, Namespace, URIRef
-from typing import Optional
+from typing import Optional, Union
 
 from .Instance import Instance
 from .Quad import Quad
+from .Resource import Resource
 from .ResourceStore import ResourceStore
 from .utils import to_camel_case
 
@@ -19,11 +20,11 @@ class PropertyInstance(Instance):
 
 
     def __init__(self, label:          str,
-                       namespace:      Optional[Namespace]     = None,
-                       resource_store: Optional[ResourceStore] = None,
-                       iri:            str                     = ""  ,
-                       domain:         Optional[URIRef]        = None,
-                       range:          Optional[URIRef]        = None):
+                       namespace:      Optional[Namespace]               = None,
+                       resource_store: Optional[ResourceStore]           = None,
+                       iri:            str                               = ""  ,
+                       domain:         Optional[Union[URIRef, Resource]] = None,
+                       range:          Optional[Union[URIRef, Resource]] = None):
 
         super().__init__(label, namespace=namespace, resource_store=resource_store, iri=iri)
 

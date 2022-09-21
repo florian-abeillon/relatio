@@ -21,11 +21,11 @@ class Property(Resource):
 
 
     def __init__(self, label:          str,
-                       namespace:      Optional[Namespace]     = None,
-                       resource_store: Optional[ResourceStore] = None,
-                       superproperty:  Union[URIRef, Resource] = RDF.Property,
-                       domain:         Optional[URIRef]        = None,
-                       range:          Optional[URIRef]        = None        ):
+                       namespace:      Optional[Namespace]               = None,
+                       resource_store: Optional[ResourceStore]           = None,
+                       superproperty:  Union[URIRef, Resource]           = RDF.Property,
+                       domain:         Optional[Union[URIRef, Resource]] = None,
+                       range:          Optional[Union[URIRef, Resource]] = None        ):
                        
         # If resource is already set, do not set it
         if self.is_set():

@@ -1,9 +1,9 @@
 
-from rdflib import Namespace
-from typing import Optional
-
 from ..Entity import Entity
-from ...resources.safe import ClassInstanceModel, ResourceStore
+from ...resources.safe import (
+    ClassInstanceModel, ClassInstance, 
+    get_safe_class
+)
 
             
 
@@ -14,21 +14,7 @@ class EntityModel(ClassInstanceModel):
     pass
 
 
-
-class SafeEntity(Entity):
-    """ 
-    Safe entity
-    """
-
-    def __init__(self, label:          str,
-                       resource_store: ResourceStore,
-                       namespace:      Optional[Namespace] = None,
-                       iri:            str                 = ""  ):
-
-        # Check arguments types
-        _ = EntityModel(label=label,
-                        resource_store=resource_store,
-                        namespace=namespace,
-                        iri=iri)
-
-        super().__init__(label, resource_store, namespace=namespace, iri=iri)
+SafeEntity = get_safe_class(class_name='SafeEntity', 
+                           class_model=EntityModel,  
+                           super_class=Entity, 
+                           super_super_class=ClassInstance)

@@ -6,3 +6,4 @@ from .Property import SafeProperty as Property, PropertyModel
 from .Quad import SafeQuad as Quad
 from .ResourceStore import SafeResourceStore as ResourceStore
 from .Resource import SafeResource as Resource
+from .utils import get_safe_class

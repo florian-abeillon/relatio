@@ -1,5 +1,6 @@
 
-from .Instance import InstanceModel
+from .Instance import InstanceModel, SafeInstance
+from .utils import get_safe_class
 from ..ClassInstance import ClassInstance
 
 
@@ -11,18 +12,7 @@ class ClassInstanceModel(InstanceModel):
     pass
 
 
-
-class SafeClassInstance(ClassInstance):
-    """ 
-    Safe instance of a RDFS class
-    """
-
-    def __init__(self, label, namespace = None, resource_store = None, iri = ""):
-
-        # Check arguments types
-        _ = ClassInstanceModel(label=label,
-                               resource_store=resource_store,
-                               namespace=namespace,
-                               iri=iri)
-
-        super().__init__(label, namespace=namespace, resource_store=resource_store, iri=iri)
+SafeClassInstance = get_safe_class(class_name='SafeClassInstance', 
+                                   class_model=ClassInstanceModel,  
+                                   super_class=ClassInstance, 
+                                   super_super_class=SafeInstance)

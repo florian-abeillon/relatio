@@ -19,8 +19,7 @@ class Instance(Resource):
     def __init__(self, label:          str,
                        namespace:      Optional[Namespace]     = None,
                        resource_store: Optional[ResourceStore] = None,
-                       iri:            str                     = ""  ,
-                       **kwargs                                      ):
+                       iri:            str                     = ""  ):
 
         # If resource is already set, do not set it
         if self.is_set():

@@ -8,7 +8,7 @@ from typing import List, Optional, Tuple, Union
 import pandas as pd
 import re
 
-from .models import RESOURCES, Entity, Relation
+from .models.safe import RESOURCES, Entity, Relation
 from .namespaces import DEFAULT
 from .resources import ResourceStore
 from .utils import bind_prefixes, save_triplestore
