@@ -44,7 +44,7 @@ class WikidataEntity(WikidataInstance, ExternalEntity):
                 # If too many requests, wait for a bit and then try again
                 print("Sleeping for", err.headers['Retry-After'], "seconds..")
                 start = time.time()
-                time.sleep(err.headers['Retry-After'])
+                time.sleep(int(err.headers['Retry-After']))
                 print(time.time() - start)
                 res = self.query_triplestore()
             else:
