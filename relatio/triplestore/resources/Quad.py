@@ -1,6 +1,22 @@
 
+from pydantic import Field
 from rdflib import Dataset, Literal, Namespace, URIRef
 from typing import Any, Optional, Union
+
+from .Model import Model
+
+
+
+class QuadModel(Model):
+    """
+    Quad model definition
+    """
+
+    subject:   Union[URIRef,      Any] = Field(..., description="Subject of quad")
+    predicate: Union[URIRef,      Any] = Field(..., description="Predicate of quad")
+    object:    Union[URIRef, str, Any] = Field(..., description="Object of quad")
+    namespace: Optional[Namespace]     = Field(None, description="Named graph of quad")
+
 
 
 
@@ -13,6 +29,9 @@ class Quad(tuple):
                      predicate: Union[URIRef,      Any], 
                      object_ :  Union[URIRef, str, Any],
                      namespace: Optional[Namespace]     = None):
+
+        # Check arguments types
+        _ = QuadModel(subject=subject, predicate=predicate, object=object_, namespace=namespace)
 
         # If no namespace was passed, get namespace of subject
         if namespace is None:

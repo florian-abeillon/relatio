@@ -19,8 +19,8 @@ def fetch_instances(graph:  Graph,
 
     for iri in graph.subjects(RDF.type, class_._type.iri):
         label = graph.value(iri, RDFS.label)
-        instance = class_(label, instances)
-        instance._quads = []
+        instance = class_(label, resource_store=instances)
+        instance._quads = set()
 
     return instances
 
@@ -38,11 +38,11 @@ def get_instances(ds: Dataset) -> Tuple[ResourceStore,
 
 
 
-async def get_resources_ext(entities:  ResourceStore, 
-                       relations: ResourceStore,
-                       spacy:     bool, 
-                       wikidata:  bool, 
-                       wordnet:   bool         ) -> ResourceStore:
+def get_resources_ext(entities:  ResourceStore, 
+                      relations: ResourceStore,
+                      spacy:     bool, 
+                      wikidata:  bool, 
+                      wordnet:   bool         ) -> ResourceStore:
     """ 
     Fetch external data 
     """
@@ -51,6 +51,7 @@ async def get_resources_ext(entities:  ResourceStore,
 
     # Enrich entities list with SpaCy data
     if spacy:
+        # from .external.spacy import build_sp_resources
         from .external.spacy import build_sp_resources
         resources_sp = build_sp_resources(entities)
         resources.update(resources_sp)
@@ -58,12 +59,14 @@ async def get_resources_ext(entities:  ResourceStore,
     # Enrich entities list with Wikidata data
     if wikidata:
         from .external.wikidata import build_wd_resources
-        resources_wd = await build_wd_resources(entities)
+        # from .external.wikidata.multiprocessing import build_wd_resources
+        resources_wd = build_wd_resources(entities)
         resources.update(resources_wd)
 
     # Enrich entities and relations lists with WordNet data
     if wordnet:
         from .external.wordnet import build_wn_resources
+        # from .external.wordnet.multiprocessing import build_wn_resources
         resources_wn = build_wn_resources(entities, relations)
         resources.update(resources_wn)
 
@@ -71,11 +74,11 @@ async def get_resources_ext(entities:  ResourceStore,
 
 
 
-async def enrich_triplestore(spacy:    bool = False, 
-                             wikidata: bool = False, 
-                             wordnet:  bool = False,
-                             path:     str  = "./",
-                             filename: str  = 'triplestore.nq') -> Dataset:
+def enrich_triplestore(spacy:    bool = False, 
+                       wikidata: bool = False, 
+                       wordnet:  bool = False,
+                       path:     str  = "./",
+                       filename: str  = 'triplestore.nq') -> Dataset:
     """ 
     Secondary function 
     """
@@ -87,13 +90,12 @@ async def enrich_triplestore(spacy:    bool = False,
 
     # Enrich triplestore with external data
     entities, relations = get_instances(ds)
-    resources_ext = await get_resources_ext(entities, relations, spacy, wikidata, wordnet)
+    resources_ext = get_resources_ext(entities, relations, spacy, wikidata, wordnet)
 
     # Fill triplestore with resources
     resources_ext.to_graph(ds)
 
     # Save triplestore
-    filename = "triplestore_enriched.trig"
     save_triplestore(ds, path, filename)
 
     return ds

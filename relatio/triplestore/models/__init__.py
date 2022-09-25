@@ -1,4 +1,5 @@
 
-from .resources import RESOURCES
+from .resources import ENTITY, RESOURCES
+from .DefaultInstance import DefaultInstance
 from .Entity import Entity
 from .Relation import Relation

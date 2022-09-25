@@ -1,21 +1,27 @@
 
-from functools import partial
-from concurrent.futures import ProcessPoolExecutor
 from rdflib import Dataset
 from tqdm import tqdm
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import pandas as pd
-import re
 
-from .models.safe import RESOURCES, Entity, Relation
+from .models import RESOURCES, Entity, Relation
 from .namespaces import DEFAULT
 from .resources import ResourceStore
-from .utils import bind_prefixes, save_triplestore
+from .utils import (
+    MULTIPROCESSING,
+    bind_prefixes, save_triplestore
+)
+
+# Appropriate import depending on the use of multiprocessing (or not)
+if MULTIPROCESSING:
+    from .utils.multiprocessing import link_partOf_entities
+else:
+    from .utils import link_partOf_entities
+
 
 # To remove unnecessary warnings
 pd.options.mode.chained_assignment = None
-
 
 
 
@@ -81,81 +87,6 @@ def add_relation(subject:   Entity,
 
 
 
-def link_partOf(i:              int,
-                key_label_list: List[Tuple[str, str]]) -> List[Tuple[str, 
-                                                                     Union[Entity, Relation]]]:
-    """
-    Function to be used in multiprocessing link_partOf_entities()
-    """
-    
-    key, label = key_label_list[i]
-
-    partOf_list = [
-        key_partOf for key_partOf, label_partOf in key_label_list
-        if (
-            # If instance_partOf is contained in instance, and
-            label_partOf in label and 
-            # Instance_partOf is not exactly instance, and
-            len(label_partOf) < len(label) and
-            # If instance_partOf is *really* contained in instance
-            re.search(fr"\b{label_partOf}\b", label) 
-        )
-    ]
-
-    return key, partOf_list
-    
-
-
-def link_partOf_entities(entities: ResourceStore) -> None:
-    """ 
-    Link partOf entities to their containing entities  
-    """
-
-    # Use multiprocessing to speed up the process
-    with ProcessPoolExecutor() as executor:
-        
-        # ResourceStore cannot be passed to multiprocess (pickle calls __init__ of entities)
-        key_label_list = [ 
-            ( key, str(entity) ) for key, entity in entities.items() 
-        ]
-        partOf_list = list(tqdm(executor.map(partial(link_partOf, key_label_list=key_label_list),
-                                             range(len(entities))), 
-                                total=len(entities), 
-                                desc=f"Linking partOf Entities.."))
-
-    # Link objects
-    for key, key_partOf_list in partOf_list:
-        for key_partOf in key_partOf_list:
-            entities[key].add_partOf(entities[key_partOf])
-
-
-
-# def link_partOf_entities(entities: ResourceStore) -> None:
-#     """ 
-#     Link partOf entities to their containing entity  
-#     """
-
-#     for key, entity in tqdm(entities.items(), 
-#                               total=len(entities), 
-#                               desc=f"Linking partOf Entities.."):
-
-#         label = str(entity)
-
-#         for entity_partOf in entities.values():
-#             label_partOf = str(entity_partOf)
-
-#             if (
-#                 # If entity_partOf is contained in entity, and
-#                 label_partOf in label and 
-#                 # entity_partOf is not exactly entity, and
-#                 len(label_partOf) < len(label) and
-#                 # If entity_partOf is *really* contained in entity
-#                 re.search(fr"\b{label_partOf}\b", label) 
-#             ):
-#                 entities[key].add_partOf(entity_partOf)
-
-
-
 def build_instances(df: pd.DataFrame) -> Tuple[ResourceStore,
                                                ResourceStore]:
     """ 
@@ -177,16 +108,16 @@ def build_instances(df: pd.DataFrame) -> Tuple[ResourceStore,
         # Create triple of instances
         add_relation(subject_hd, predicate_hd, object_hd)
 
-    # Link partOf instances
+    # Link containing entities to their contained ones
     link_partOf_entities(entities)
 
     return entities, relations
 
 
 
-async def build_triplestore(df:       pd.DataFrame,
-                            path:     str          = "./",
-                            filename: str          = 'triplestore.nq') -> Dataset:
+def build_triplestore(df:       pd.DataFrame,
+                      path:     str          = "./",
+                      filename: str          = 'triplestore.nq') -> Dataset:
     """ 
     Main function 
     """

@@ -1,6 +1,18 @@
 
+from pydantic import Field
 from rdflib import Dataset
 from typing import Any, List, Optional
+
+from .Model import Model
+
+
+
+class ResourceStoreModel(Model):
+    """
+    ResourceStore model definition
+    """
+
+    resources: List[Any] = Field(default_factory=list, description="List of Resources")
 
 
 
@@ -9,8 +21,13 @@ class ResourceStore(dict):
     Store of resources to be filled into triplestore 
     """
 
-    def __init__(self, resources: List[Any] = []):
+    def __new__(cls, resources: List[Any] = []):
+        # Check arguments types
+        _ = ResourceStoreModel(resources=resources)
+        return super().__new__(cls)
 
+
+    def __init__(self, resources: List[Any] = []):
         for resource in resources:
             self.add(resource)
 

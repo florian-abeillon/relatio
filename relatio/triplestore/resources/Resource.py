@@ -1,10 +1,24 @@
 
+from pydantic import Field
 from rdflib import RDFS, Dataset, Namespace, URIRef
 from typing import List, Optional
 
+from .Model import Model
 from .Quad import Quad
 from .ResourceStore import ResourceStore
 from .utils import get_hash
+
+
+
+class ResourceModel(Model):
+    """
+    Resource model definition
+    """
+
+    label:          str                 = Field(...,  description="Label of resource")
+    namespace:      Optional[Namespace] = Field(None, description="Named graph of class instance")
+    resource_store: Optional[dict]      = Field(None, description="ResourceStore to put resource into")
+
 
 
 
@@ -19,9 +33,10 @@ class Resource:
 
     def __new__(cls, label:          str,
                      namespace:      Optional[Namespace]     = None,
-                     resource_store: Optional[ResourceStore] = None,
-                     iri:            str                     = ""  ,
-                     **kwargs                                      ):
+                     resource_store: Optional[ResourceStore] = None):
+
+        # Check arguments types
+        _ = ResourceModel(label=label, namespace=namespace, resource_store=resource_store)
         
         # If a ResourceStore is mentionned
         if resource_store is not None:
@@ -42,8 +57,7 @@ class Resource:
 
     def __init__(self, label:     str,
                        namespace: Optional[Namespace]          = None,
-                       resource_store: Optional[ResourceStore] = None,
-                       iri:       str                          = ""  ):
+                       resource_store: Optional[ResourceStore] = None):
 
         # If resource is already set, do not set it
         if self.is_set():
@@ -53,39 +67,38 @@ class Resource:
             self.__class__._namespace = namespace
         assert self.__class__._namespace is not None, "Please provide a namespace to resource"
 
-        self._label = self.__class__._format_label(label)
-        self._iri = URIRef(iri) if iri else self.generate_iri(self._label)
+        self._label = self._format_label(label)
+        self._iri = self.__class__.generate_iri(self._label)
 
         self._quads = {
             Quad( self, RDFS.label, self._label )
         }
 
-        
+    
     @property
     def label(self) -> str:
         return self._label
-
     @property
     def iri(self) -> URIRef:
         return self._iri
-    @iri.setter
-    def iri(self, value) -> URIRef:
-        self._iri = URIRef(value)
         
     def __str__(self) -> str:
-        return self.label
+        return self._label
     def __repr__(self) -> str:
-        return str(self.iri)
+        return str(self._iri)
     def __hash__(self) -> int:
-        return get_hash(self.iri)
+        return get_hash(self._iri)
 
 
     @classmethod
-    def generate_iri(cls, label: str) -> URIRef:
+    def generate_iri(cls, label: str, 
+                          namespace: Optional[Namespace] = None) -> URIRef:
         """ 
-        Build unique resource identifier 
+        Build unique resource identifier from label
         """
-        return cls._namespace[label]
+        if namespace is None:
+            namespace = cls._namespace
+        return namespace[label]
 
 
     def is_set(self) -> bool:

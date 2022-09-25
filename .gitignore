@@ -3,6 +3,7 @@
 ~*
 
 *.tar.gz
+*.csv
 
 # Blazegraph files
 *.jar

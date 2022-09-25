@@ -2,11 +2,18 @@
 from rdflib import Namespace
 
 from .DefaultInstance import DefaultInstance
-from .resources import CONTAINS, ENTITY
+from .resources import ENTITY
 from ..resources import (
-    ClassInstance, PropertyInstance, 
-    Quad
+    ClassInstance, ClassInstanceModel, 
+    PropertyInstance, Quad
 )
+
+
+class EntityModel(ClassInstanceModel):
+    """
+    Entity model definition
+    """
+    pass
 
 
 
@@ -18,14 +25,10 @@ class Entity(DefaultInstance, ClassInstance):
     _type = ENTITY
 
 
-    def add_partOf(self, partOf_instance: ClassInstance) -> None:
-        """ 
-        Add partOf instance of self
-        """
-        if self.label.lower() != partOf_instance.label.lower():
-            self.add_quad(
-                Quad( self, CONTAINS, partOf_instance, namespace=partOf_instance._namespace )
-            )
+    def __new__(cls, label, **kwargs):
+        # Check arguments types
+        _ = EntityModel(label=label, **kwargs)
+        return super().__new__(cls, label, **kwargs)
 
 
     def add_object(self, relation:  PropertyInstance, 
