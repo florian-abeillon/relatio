@@ -57,7 +57,6 @@ def format_res(res: Dict[str, str]) -> List[dict]:
     
 
 
-# TODO: Check whether timer works
 def query_triplestore(url:       str, 
                       query:     str,
                       first_try: bool = True) -> List[dict]:

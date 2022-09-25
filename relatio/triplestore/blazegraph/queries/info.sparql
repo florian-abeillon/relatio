@@ -1,35 +1,64 @@
 
-PREFIX : <http://hd.relat.io#>
-
-
-SELECT DISTINCT ?s_label ?p_label ?o_label
+PREFIX : <urn:x-rdflib:default#>
 
 
 # Select triples containing center node
-WHERE {{
+SELECT *
 
-   {{
-      ?center a          :Entity   ;
-              rdfs:label "{label}" .
 
-      # Get all triples starting from center node
-      ?center (a|!a)?/(a|!a)?/(a|!a)? ?s .
+WHERE {{ 
 
-   }} UNION {{
-      ?center a          :Entity   ;
-              rdfs:label "{label}" .
+    {{
+        SELECT ( "{label}"                        AS ?s1  )
+               ( COALESCE( ?p_o_label, ?p_o )     AS ?p12 )
+               ( ?o_label                         AS ?s2  )
+               ( COALESCE( ?p_o_o_label, ?p_o_o ) AS ?p23 )
+               ( ?o_o_label                       AS ?s3  )
+        
+        WHERE {{
+        
+            # Select center node
+            ?entity a          :Entity   ;
+                    rdfs:label "{label}" .
 
-      # Get all triples ending to center node
-      ?s (a|!a)?/(a|!a)?/(a|!a)? ?center .
+            # Get all triples with center node as the subject
+            ?entity ?p_o   ?o   . 
+            ?o      ?p_o_o ?o_o .
 
-   }}
-   
-   ?s ?p ?o .
-   ?s a          :Entity   ;
-      rdfs:label ?s_label  .
-   ?p a          :relation ;
-      rdfs:label ?p_label  .
-   ?o a          :Entity   ;
-      rdfs:label ?o_label  .
-           
+            # Retrieve prefLabels (if any)
+            ?o   rdfs:label ?o_label   .
+            ?o_o rdfs:label ?o_o_label .
+            OPTIONAL {{ ?p_o   rdfs:label ?p_o_label   }}
+            OPTIONAL {{ ?p_o_o rdfs:label ?p_o_o_label }}
+            
+        }}
+        
+    }} UNION {{
+    
+        SELECT ( ?s_s_label                       AS ?s1  )
+               ( COALESCE( ?p_s_s_label, ?p_s_s ) AS ?p12 )
+               ( ?s_label                         AS ?s2  )
+               ( COALESCE( ?p_s_label, ?p_s )     AS ?p23 )
+               ( "{label}"                        AS ?s3  )
+        
+        WHERE {{
+    
+            # Select center node
+            ?entity a          :Entity ;
+                    rdfs:label "{label}" .
+
+            # Get all triples with center node as the object
+            ?s   ?p_s   ?entity . 
+            ?s_s ?p_s_s ?s      .
+
+            # Retrieve prefLabels (if any)
+            ?s   rdfs:label ?s_label   .
+            ?s_s rdfs:label ?s_s_label .
+            OPTIONAL {{ ?p_s   rdfs:label ?p_s_label   }}
+            OPTIONAL {{ ?p_s_s rdfs:label ?p_s_s_label }}
+        
+        }}
+        
+    }}
+
 }}

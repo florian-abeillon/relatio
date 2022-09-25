@@ -40,12 +40,9 @@ class WikidataEntity(WikidataInstance, ExternalEntity):
 
         except HTTPError as err:
             if err.getcode() == 429:
-                # TODO: Check that it works
                 # If too many requests, wait for a bit and then try again
                 print("Sleeping for", err.headers['Retry-After'], "seconds..")
-                start = time.time()
                 time.sleep(int(err.headers['Retry-After']))
-                print(time.time() - start)
                 res = self.query_triplestore()
             else:
                 # If other error, print it

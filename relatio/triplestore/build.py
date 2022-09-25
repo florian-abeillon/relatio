@@ -116,7 +116,7 @@ def build_instances(df: pd.DataFrame) -> Tuple[ResourceStore,
 
 
 def build_triplestore(df:       pd.DataFrame,
-                      path:     str          = "./",
+                      path:     str          = "",
                       filename: str          = 'triplestore.nq') -> Dataset:
     """ 
     Main function 
@@ -142,8 +142,9 @@ def build_triplestore(df:       pd.DataFrame,
     for resource_store in resource_stores:
         resource_store.to_graph(ds)
 
-    # Save triplestore
-    save_triplestore(ds, path, filename)
+    if path:
+        # Save triplestore
+        save_triplestore(ds, path, filename)
 
     print("Done!")
     return ds

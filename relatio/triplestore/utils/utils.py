@@ -12,8 +12,8 @@ MULTITHREADING  = True
 
 EXTENSIONS = {
     'ttl': 'turtle',
-    'nt': 'ntriples',
-    'nq': 'nquads'
+    'nt': 'ntriples',   # To use for human-readable triples
+    'nq': 'nquads'      # To use for better performances
 }
 
 

@@ -77,7 +77,7 @@ def get_resources_ext(entities:  ResourceStore,
 def enrich_triplestore(spacy:    bool = False, 
                        wikidata: bool = False, 
                        wordnet:  bool = False,
-                       path:     str  = "./",
+                       path:     str  = "",
                        filename: str  = 'triplestore.nq') -> Dataset:
     """ 
     Secondary function 
@@ -95,7 +95,8 @@ def enrich_triplestore(spacy:    bool = False,
     # Fill triplestore with resources
     resources_ext.to_graph(ds)
 
-    # Save triplestore
-    save_triplestore(ds, path, filename)
+    if path:
+        # Save triplestore
+        save_triplestore(ds, path, filename)
 
     return ds

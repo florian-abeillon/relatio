@@ -14,7 +14,7 @@ def add_move_to_path(cmd:  str,
     return f"cd {path} && " + cmd
 
 
-def init(path: str = "") -> None:
+def init_server(path: str = "") -> None:
     """ 
     Initialize Blazegraph server with local file
     """
@@ -24,7 +24,7 @@ def init(path: str = "") -> None:
     subprocess.run(cmd, shell=True)
 
 
-def launch(path: str = "") -> subprocess.Popen:
+def launch_server(path: str = "") -> subprocess.Popen:
     """ 
     Launch Blazegraph server 
     """
@@ -34,7 +34,7 @@ def launch(path: str = "") -> subprocess.Popen:
     return subprocess.Popen(cmd, shell=True, preexec_fn=os.setsid)
 
 
-def stop(bg: subprocess.Popen) -> None:
+def stop_server(bg: subprocess.Popen) -> None:
     """ 
     Kill Blazegraph server 
     """
